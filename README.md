@@ -1,3 +1,12 @@
+---
+title: Sentence Similarity Analysis Tool
+emoji: 🚀
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 7860
+pinned: false
+---
 # Sentence Similarity Analysis Tool
 
 A Streamlit app for analyzing similarity between sentences in Excel files using embeddings (E5-large-v2) and LLM analysis (Phi-3-mini).
