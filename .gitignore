@@ -1,0 +1,10 @@
+# Ignore cached and generated files
+data/cache/*
+logs/*
+models/*
+# Ignore Python bytecode
+__pycache__/
+*.pyc
+# Ignore local environment
+.venv/
+venv/
