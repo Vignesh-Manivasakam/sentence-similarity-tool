@@ -9,7 +9,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.postprocess import highlight_word_differences
 from app.config import (
     EMBEDDING_MODEL_NAME, EMBEDDING_DIMENSION, EMBEDDING_BATCH_SIZE,
-    EMBEDDING_DEVICE, BASE_EMBEDDINGS_FILE, FAISS_INDEX_FILE, HASH_FILE
+    EMBEDDING_DEVICE, BASE_EMBEDDINGS_FILE, FAISS_INDEX_FILE, HASH_FILE,
+    MAX_TOKENS_FOR_TRUNCATION
 )
 
 logger = logging.getLogger(__name__)
@@ -47,13 +48,99 @@ class EmbeddingModel:
         logger.info(f"Loaded HuggingFace model: {model_name} on {device}")
         logger.info(f"Embedding dimension: {self._embedding_dimension}")
 
+    @property
+    def tokenizer(self):
+        """
+        Expose the underlying tokenizer from SentenceTransformer.
+        The tokenizer is accessed from the internal Transformer module.
+        """
+        try:
+            # Method 1: Direct tokenizer attribute
+            if hasattr(self.model, 'tokenizer'):
+                return self.model.tokenizer
+            
+            # Method 2: Access from the first module (Transformer model)
+            if len(self.model) > 0:
+                first_module = self.model[0]
+                if hasattr(first_module, 'tokenizer'):
+                    return first_module.tokenizer
+                # Try auto_model attribute
+                if hasattr(first_module, 'auto_model') and hasattr(first_module.auto_model, 'tokenizer'):
+                    return first_module.auto_model.tokenizer
+            
+            logger.warning("Could not find tokenizer in SentenceTransformer model")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error accessing tokenizer: {e}")
+            return None
+
+    def truncate_text(self, text, max_tokens=None):
+        """
+        Truncate text to max tokens using the model's tokenizer if available.
+        Falls back to character-based truncation if tokenizer is not available.
+        
+        Args:
+            text (str): Text to truncate
+            max_tokens (int): Maximum number of tokens (default: MAX_TOKENS_FOR_TRUNCATION from config)
+        
+        Returns:
+            tuple: (truncated_text, was_truncated)
+        """
+        if not text:
+            return text, False
+        
+        if max_tokens is None:
+            max_tokens = MAX_TOKENS_FOR_TRUNCATION
+        
+        # Try tokenizer-based truncation
+        tokenizer = self.tokenizer
+        if tokenizer is not None:
+            try:
+                # Encode without special tokens
+                tokens = tokenizer.encode(text, add_special_tokens=False, truncation=False)
+                
+                if len(tokens) > max_tokens:
+                    # Truncate tokens
+                    truncated_tokens = tokens[:max_tokens]
+                    # Decode back to text
+                    truncated_text = tokenizer.decode(truncated_tokens, skip_special_tokens=True)
+                    logger.debug(f"Tokenizer truncation: {len(tokens)} tokens → {max_tokens} tokens")
+                    return truncated_text, True
+                
+                return text, False
+                
+            except Exception as e:
+                logger.warning(f"Tokenizer truncation failed: {e}. Using character-based fallback.")
+        
+        # Fallback: character-based truncation (estimate ~4 chars/token for English)
+        max_chars = max_tokens * 4
+        if len(text) > max_chars:
+            truncated = text[:max_chars]
+            logger.debug(f"Character-based truncation: {len(text)} chars → {max_chars} chars")
+            return truncated, True
+        
+        return text, False
+
     def encode(self, texts, convert_to_numpy=True, show_progress_bar=False, batch_size=None):
+        """
+        Encode texts into embeddings with deduplication and progress tracking.
+        
+        Args:
+            texts: Single string or list of strings to encode
+            convert_to_numpy: Whether to return numpy array
+            show_progress_bar: Whether to show progress (handled via callback)
+            batch_size: Batch size for encoding (default: self.batch_size)
+        
+        Returns:
+            numpy.ndarray or list of embeddings
+        """
         if isinstance(texts, str):
             texts = [texts]
         if not texts:
             return np.array([]) if convert_to_numpy else []
 
-        # Deduplicate inputs
+        # Deduplicate inputs to avoid redundant encoding
         unique_texts = list(dict.fromkeys(texts))
         batch_sz = batch_size or self.batch_size
         
@@ -100,7 +187,9 @@ class EmbeddingModel:
         return np.array(final_embeddings) if convert_to_numpy else final_embeddings
 
     def get_sentence_embedding_dimension(self):
+        """Get the embedding dimension of the model."""
         return self._embedding_dimension
+
 
 def load_model():
     """Load the HuggingFace BGE-large embedding model."""
@@ -116,9 +205,9 @@ def load_model():
         logger.error(f"FATAL: Failed to load embedding model. Error: {e}")
         raise RuntimeError(f"Could not load embedding model. Details: {e}")
 
-# ... (continuation from line 207)
 
 def _compute_file_hash(file_obj):
+    """Compute SHA256 hash of file for cache validation."""
     sha256 = hashlib.sha256()
     file_obj.seek(0)
     for chunk in iter(lambda: file_obj.read(4096), b""):
@@ -285,6 +374,7 @@ def create_faiss_index(data: list, model, base_file_obj, user_session_id=None, p
 # ---------------------------
 
 def _parse_hierarchy(hstr):
+    """Parse hierarchy string into list of integers."""
     if not hstr:
         return []
     parts = hstr.replace('-', '.').split('.')
@@ -296,6 +386,7 @@ def _parse_hierarchy(hstr):
 
 
 def _hierarchy_distance(qh, bh):
+    """Calculate hierarchical distance between two hierarchy strings."""
     q = _parse_hierarchy(qh)
     b = _parse_hierarchy(bh)
     if not q or not b:
@@ -311,6 +402,7 @@ def _hierarchy_distance(qh, bh):
 
 
 def choose_by_hierarchy(query_entry, candidates):
+    """Choose the best matching candidate based on hierarchy proximity."""
     qh = query_entry.get("Hierarchy")
     if not qh or not candidates:
         return candidates[0]
@@ -330,6 +422,21 @@ def choose_by_hierarchy(query_entry, candidates):
 # ---------------------------
 
 def search_similar(user_data, index, base_data, top_k, thresholds, model, progress_callback=None):
+    """
+    Perform similarity search using FAISS index with exact match optimization.
+    
+    Args:
+        user_data: List of user query entries
+        index: FAISS index
+        base_data: List of base entries
+        top_k: Number of top matches to return
+        thresholds: Dictionary of similarity thresholds
+        model: EmbeddingModel instance
+        progress_callback: Optional callback for progress updates
+    
+    Returns:
+        Tuple of (results, user_embeddings)
+    """
     logger.info(f"Starting similarity search for {len(user_data)} queries against {len(base_data)} base items")
     results = []
 
