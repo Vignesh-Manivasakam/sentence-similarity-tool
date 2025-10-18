@@ -1,21 +1,22 @@
 # Core dependencies
-streamlit==1.31.0
+streamlit==1.38.0
 pandas==2.1.4
 numpy==1.26.3
 openpyxl==3.1.2
+pint==0.23  
 
 # Machine Learning & Embeddings
 sentence-transformers==2.3.1
 torch==2.1.2
 faiss-cpu==1.7.4
 scikit-learn==1.4.0
-
+transformers==4.44.2
 # LLM Integration
 groq==0.4.2
 tiktoken==0.5.2
 
 # Utilities
-tenacity==8.2.3
+tenacity>=8.1.0,<9
 plotly==5.18.0
 requests==2.31.0
 
