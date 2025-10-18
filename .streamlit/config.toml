@@ -1,0 +1,28 @@
+[server]
+headless = true
+enableCORS = false
+enableXsrfProtection = false
+port = 7860
+maxUploadSize = 200
+
+[browser]
+gatherUsageStats = false
+serverAddress = "0.0.0.0"
+serverPort = 7860
+
+[theme]
+primaryColor = "#0066cc"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+
+# ✅ Critical for file uploads in HF Spaces
+[runner]
+magicEnabled = false
+fastReruns = true
+
+# ✅ Increase upload size (in MB)
+[server]
+maxUploadSize = 200
+maxMessageSize = 200
+enableWebsocketCompression = true

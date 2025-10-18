@@ -23,3 +23,7 @@ requests==2.31.0
 # Optional: For GPU support
 # faiss-gpu==1.7.4
 # torch==2.1.2+cu118  # Adjust for your CUDA version
+
+# ✅ Add these for HF Spaces compatibility
+urllib3==1.26.18
+certifi==2023.11.17

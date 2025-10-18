@@ -226,7 +226,6 @@ def load_sidebar():
 def main():
     """Main function to run the Streamlit application."""
     st.markdown("<h1 style='text-align: center;'>📘 AI similarity Assist Tool🔍</h1>", unsafe_allow_html=True)
-    st.markdown("<h6 style='text-align: center;'>For any Queries Contact: Vignesh Manivasakam (MS/ENP42-VM) </h6>", unsafe_allow_html=True)
     # Initialize user session
     user_session_id = initialize_user_session()
     # ADD THIS LINE - Initialize file session state

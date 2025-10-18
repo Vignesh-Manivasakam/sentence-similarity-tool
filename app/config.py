@@ -42,8 +42,8 @@ DEFAULT_THRESHOLDS = {
     'moderate': 0.7
 }
 
-# File size limit (10MB)
-MAX_FILE_SIZE = 10 * 1024 * 1024
+# File size limit (5MB)
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
 # Centralized configuration
 MAX_TOKENS_FOR_TRUNCATION = 512
