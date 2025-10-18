@@ -1,18 +1,20 @@
 import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
+from sklearn.preprocessing import normalize
 import logging
 import os
 import hashlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.postprocess import highlight_word_differences
 from app.config import (
-    HF_MODEL_NAME, BASE_EMBEDDINGS_FILE, FAISS_INDEX_FILE, HASH_FILE
+    EMBEDDING_MODEL_NAME, EMBEDDING_DIMENSION, EMBEDDING_BATCH_SIZE,
+    EMBEDDING_DEVICE, BASE_EMBEDDINGS_FILE, FAISS_INDEX_FILE, HASH_FILE
 )
 
 logger = logging.getLogger(__name__)
 
-# Add global, optional embedding progress callback
+# Global embedding progress callback
 _EMBEDDING_PROGRESS_CB = None
 
 def set_embedding_progress_callback(cb):
@@ -22,78 +24,6 @@ def set_embedding_progress_callback(cb):
     """
     global _EMBEDDING_PROGRESS_CB
     _EMBEDDING_PROGRESS_CB = cb
-
-class EmbeddingModel:
-    """
-    Wrapper class for SentenceTransformer embeddings with batching, deduplication, and parallelism.
-    """
-    def __init__(self, model_name, batch_size=256, max_workers=4):
-        self.model = SentenceTransformer(model_name)
-        self.tokenizer = self.model.tokenizer
-        self._embedding_dimension = self.model.get_sentence_embedding_dimension()
-        self.batch_size = batch_size
-        self.max_workers = max_workers
-
-    def _embed_batch(self, batch):
-        try:
-            embeddings = self.model.encode(batch, batch_size=len(batch), normalize_embeddings=True)
-            return [np.array(emb) for emb in embeddings]
-        except Exception as e:
-            logger.error(f"Batch embedding failed: {e}")
-            return [np.zeros(self._embedding_dimension) for _ in batch]
-
-    def encode(self, texts, convert_to_numpy=True, show_progress_bar=False, batch_size=None):
-        if isinstance(texts, str):
-            texts = [texts]
-        if not texts:
-            return np.array([]) if convert_to_numpy else []
-
-        # Deduplicate inputs
-        unique_texts = list(dict.fromkeys(texts))
-        text_to_embedding = {}
-        batches = [unique_texts[i:i+(batch_size or self.batch_size)]
-                   for i in range(0, len(unique_texts), (batch_size or self.batch_size))]
-        
-        logger.info(f"Encoding {len(unique_texts):,} unique texts in {len(batches)} batches "
-                    f"(batch_size={batch_size or self.batch_size})")
-        logger.info(f"Launching {len(batches)} batch jobs with up to {self.max_workers} parallel workers")
-
-        total_batches = len(batches)
-        if _EMBEDDING_PROGRESS_CB:
-            try:
-                _EMBEDDING_PROGRESS_CB(0, total_batches)
-            except Exception:
-                pass
-
-        # Parallel batch requests
-        completed = 0
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = {executor.submit(self._embed_batch, b): b for b in batches}
-            for fut in as_completed(futures):
-                batch = futures[fut]
-                try:
-                    embeddings = fut.result()
-                    for t, emb in zip(batch, embeddings):
-                        text_to_embedding[t] = emb
-                except Exception as e:
-                    logger.error(f"Batch embedding failed for {batch[:2]}... : {e}")
-                    for t in batch:
-                        text_to_embedding[t] = np.zeros(self._embedding_dimension)
-
-                completed += 1
-                if _EMBEDDING_PROGRESS_CB:
-                    try:
-                        _EMBEDDING_PROGRESS_CB(completed, total_batches)
-                    except Exception:
-                        pass
-                logger.info(f"Completed {completed}/{total_batches} batches")
-
-        # Map back to original order
-        all_embeddings = [text_to_embedding.get(t, np.zeros(self._embedding_dimension)) for t in texts]
-        return np.array(all_embeddings) if convert_to_numpy else all_embeddings
-
-    def get_sentence_embedding_dimension(self):
-        return self._embedding_dimension
 
 def get_user_cache_files(user_session_id):
     """Get user-specific cache file paths"""
@@ -105,102 +35,328 @@ def get_user_cache_files(user_session_id):
         'hash': os.path.join(user_cache_dir, "base_file_hash.txt")
     }
 
-def compute_file_hash(file_obj):
-    """Compute SHA256 hash of file content"""
-    file_obj.seek(0)
+class EmbeddingModel:
+    """
+    Wrapper class for HuggingFace Sentence-Transformers (BGE-large).
+    """
+
+    def __init__(self, model_name, batch_size=32, device='cuda'):
+        self.model = SentenceTransformer(model_name, device=device)
+        self.batch_size = batch_size
+        self._embedding_dimension = self.model.get_sentence_embedding_dimension()
+        logger.info(f"Loaded HuggingFace model: {model_name} on {device}")
+        logger.info(f"Embedding dimension: {self._embedding_dimension}")
+
+    def encode(self, texts, convert_to_numpy=True, show_progress_bar=False, batch_size=None):
+        if isinstance(texts, str):
+            texts = [texts]
+        if not texts:
+            return np.array([]) if convert_to_numpy else []
+
+        # Deduplicate inputs
+        unique_texts = list(dict.fromkeys(texts))
+        batch_sz = batch_size or self.batch_size
+        
+        logger.info(f"Encoding {len(unique_texts):,} unique texts (batch_size={batch_sz})")
+        
+        # Calculate total batches for progress tracking
+        total_batches = (len(unique_texts) + batch_sz - 1) // batch_sz
+        
+        if _EMBEDDING_PROGRESS_CB:
+            try:
+                _EMBEDDING_PROGRESS_CB(0, total_batches)
+            except Exception:
+                pass
+
+        # Encode with progress tracking
+        embeddings = []
+        for i in range(0, len(unique_texts), batch_sz):
+            batch = unique_texts[i:i+batch_sz]
+            batch_embeddings = self.model.encode(
+                batch,
+                convert_to_numpy=True,
+                show_progress_bar=False
+            )
+            embeddings.append(batch_embeddings)
+            
+            # Update progress
+            completed = (i // batch_sz) + 1
+            if _EMBEDDING_PROGRESS_CB:
+                try:
+                    _EMBEDDING_PROGRESS_CB(completed, total_batches)
+                except Exception:
+                    pass
+            logger.info(f"Completed {completed}/{total_batches} batches")
+
+        # Concatenate all batches
+        all_embeddings = np.vstack(embeddings)
+        
+        # Create mapping from unique texts to embeddings
+        text_to_embedding = {t: emb for t, emb in zip(unique_texts, all_embeddings)}
+        
+        # Map back to original order (including duplicates)
+        final_embeddings = [text_to_embedding[t] for t in texts]
+        
+        return np.array(final_embeddings) if convert_to_numpy else final_embeddings
+
+    def get_sentence_embedding_dimension(self):
+        return self._embedding_dimension
+
+def load_model():
+    """Load the HuggingFace BGE-large embedding model."""
+    try:
+        model = EmbeddingModel(
+            model_name=EMBEDDING_MODEL_NAME,
+            batch_size=EMBEDDING_BATCH_SIZE,
+            device=EMBEDDING_DEVICE
+        )
+        logger.info("Successfully loaded HuggingFace embedding model.")
+        return model
+    except Exception as e:
+        logger.error(f"FATAL: Failed to load embedding model. Error: {e}")
+        raise RuntimeError(f"Could not load embedding model. Details: {e}")
+
+# ... (continuation from line 207)
+
+def _compute_file_hash(file_obj):
     sha256 = hashlib.sha256()
-    while chunk := file_obj.read(8192):
+    file_obj.seek(0)
+    for chunk in iter(lambda: file_obj.read(4096), b""):
         sha256.update(chunk)
     file_obj.seek(0)
     return sha256.hexdigest()
 
-def load_model():
-    """Load the embedding model"""
+
+def _check_cache_validity(current_hash: str, user_session_id=None) -> bool:
+    """Check cache validity for specific user or global cache"""
+    if user_session_id is None:
+        cache_files = {
+            'embeddings': BASE_EMBEDDINGS_FILE,
+            'index': FAISS_INDEX_FILE,
+            'hash': HASH_FILE
+        }
+    else:
+        cache_files = get_user_cache_files(user_session_id)
+    
+    if not all(os.path.exists(f) for f in cache_files.values()):
+        logger.info(f"Cache files missing for {user_session_id or 'global'}")
+        return False
+    
     try:
-        model = EmbeddingModel(HF_MODEL_NAME)
-        logger.info(f"Successfully loaded model: {HF_MODEL_NAME}")
-        return model
-    except Exception as e:
-        logger.error(f"Failed to load model {HF_MODEL_NAME}: {e}")
-        raise
-
-def create_faiss_index(data, model, base_file, user_session_id=None, progress_callback=None):
-    """Create or load FAISS index for base data"""
-    cache_files = get_user_cache_files(user_session_id) if user_session_id else {
-        'embeddings': BASE_EMBEDDINGS_FILE,
-        'index': FAISS_INDEX_FILE,
-        'hash': HASH_FILE
-    }
-
-    file_hash = compute_file_hash(base_file) if base_file else None
-    cached_hash = None
-    if os.path.exists(cache_files['hash']):
-        with open(cache_files['hash'], 'r') as f:
+        with open(cache_files['hash'], "r", encoding='utf-8') as f:
             cached_hash = f.read().strip()
+        if cached_hash == current_hash:
+            logger.info(f"Cache is valid for {user_session_id or 'global'}")
+            return True
+        logger.info(f"Cache hash mismatch for {user_session_id or 'global'}. Regenerating index.")
+        return False
+    except IOError as e:
+        logger.warning(f"Error reading cache hash file for {user_session_id or 'global'}: {e}")
+        return False
 
-    if (os.path.exists(cache_files['embeddings']) and 
-        os.path.exists(cache_files['index']) and 
-        file_hash == cached_hash):
-        logger.info("Loading cached FAISS index and embeddings")
+
+def _load_from_cache(user_session_id=None):
+    """Load from user-specific cache or global cache"""
+    try:
+        if user_session_id is None:
+            cache_files = {
+                'embeddings': BASE_EMBEDDINGS_FILE,
+                'index': FAISS_INDEX_FILE
+            }
+        else:
+            cache_files = get_user_cache_files(user_session_id)
+        
+        logger.info(f"Loading FAISS index and embeddings from cache for {user_session_id or 'global'}")
         embeddings = np.load(cache_files['embeddings'])
         index = faiss.read_index(cache_files['index'])
-        return index, embeddings, data
+        return index, embeddings
+    except Exception as e:
+        logger.warning(f"Failed to load from cache for {user_session_id or 'global'}: {e}. Regeneration will occur.")
+        return None, None
 
-    logger.info("Creating new FAISS index")
+
+def _generate_and_save_index(data: list, model, current_hash: str, user_session_id=None, progress_callback=None):
+    """Generates new embeddings and FAISS index using BGE-large model, then saves them to user-specific or global cache."""
+    logger.info(f"Generating new embeddings and FAISS index using BGE-large for {user_session_id or 'global'}")
     texts = [entry['Cleaned_Text'] for entry in data]
+    if not texts:
+        raise ValueError("No texts found for embedding generation")
+
+    # Progress callback for embeddings
     if progress_callback:
-        progress_callback(0, 2, "🏗️ Generating embeddings...")
+        progress_callback(0.2, 1.0, f"🔗 Generating embeddings for {len(texts)} texts...")
+
+    embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=True)
+
+    # Log embedding information
+    logger.info(f"Generated embeddings shape: {embeddings.shape}")
+    logger.info(f"Embedding dimension: {embeddings.shape[1]}")
+    logger.info(f"Number of texts embedded: {embeddings.shape[0]}")
+    logger.info(f"Memory usage (approx): {embeddings.nbytes / 1024 / 1024:.2f} MB")
+
+    if progress_callback:
+        progress_callback(0.9, 1.0, "🏗️ Building FAISS index...")
+
+    # Normalize for cosine similarity
+    normalized = normalize(embeddings, axis=1, norm='l2')
+    dim = normalized.shape[1]
+
+    # Create FAISS index
+    index = faiss.IndexFlatIP(dim)
+    index.add(normalized)
+    logger.info(f"FAISS index created with dimension: {dim}")
+
+    if progress_callback:
+        progress_callback(0.95, 1.0, "💾 Saving to cache...")
+
+    # Cache with user-specific or global paths
+    try:
+        if user_session_id is None:
+            cache_files = {
+                'embeddings': BASE_EMBEDDINGS_FILE,
+                'index': FAISS_INDEX_FILE,
+                'hash': HASH_FILE
+            }
+        else:
+            cache_files = get_user_cache_files(user_session_id)
+        
+        os.makedirs(os.path.dirname(cache_files['embeddings']), exist_ok=True)
+        
+        np.save(cache_files['embeddings'], normalized)
+        faiss.write_index(index, cache_files['index'])
+        with open(cache_files['hash'], "w", encoding='utf-8') as f:
+            f.write(current_hash)
+        logger.info(f"Successfully cached embeddings and index for {user_session_id or 'global'}")
+    except (IOError, Exception) as e:
+        logger.warning(f"Failed to cache embeddings/index for {user_session_id or 'global'}: {e}")
+
+    if progress_callback:
+        progress_callback(1.0, 1.0, "✅ Index creation complete!")
+
+    return index, normalized
+
+
+def create_faiss_index(data: list, model, base_file_obj, user_session_id=None, progress_callback=None):
+    """Create or load FAISS index for similarity search with user-specific caching."""
+    if user_session_id:
+        cache_files = get_user_cache_files(user_session_id)
+        os.makedirs(os.path.dirname(cache_files['index']), exist_ok=True)
+        logger.info(f"Using user-specific cache for session: {user_session_id}")
+    else:
+        os.makedirs(os.path.dirname(FAISS_INDEX_FILE), exist_ok=True)
+        logger.info("Using global cache")
     
-    embeddings = model.encode(texts, convert_to_numpy=True)
-    dimension = model.get_sentence_embedding_dimension()
-    index = faiss.IndexFlatIP(dimension)
-    index.add(embeddings)
+    if progress_callback:
+        progress_callback(0, 3, "🔍 Computing file hash...")
+    
+    current_hash = _compute_file_hash(base_file_obj)
 
     if progress_callback:
-        progress_callback(1, 2, "🏗️ Building FAISS index...")
+        progress_callback(1, 3, "📋 Checking cache validity...")
 
-    os.makedirs(os.path.dirname(cache_files['embeddings']), exist_ok=True)
-    np.save(cache_files['embeddings'], embeddings)
-    faiss.write_index(index, cache_files['index'])
-    if file_hash:
-        with open(cache_files['hash'], 'w') as f:
-            f.write(file_hash)
+    if _check_cache_validity(current_hash, user_session_id):
+        index, embeddings = _load_from_cache(user_session_id)
+        if index is not None and embeddings is not None:
+            logger.info(f"Using cached FAISS index and embeddings for {user_session_id or 'global'}")
+            if progress_callback:
+                progress_callback(3, 3, "📦 Loaded from cache")
+            return index, embeddings, data
 
     if progress_callback:
-        progress_callback(2, 2, "🏗️ FAISS index created!")
+        progress_callback(2, 3, "⚡ Generating new index...")
+
+    logger.info(f"Generating new FAISS index with BGE-large embeddings for {user_session_id or 'global'}")
+    
+    def index_generation_progress(sub_progress, sub_total, sub_message):
+        if sub_total > 0:
+            overall_progress = 2.0 + (sub_progress / sub_total)
+            progress_callback(overall_progress, 3, sub_message)
+    
+    index, embeddings = _generate_and_save_index(data, model, current_hash, user_session_id, index_generation_progress)
+    
+    if progress_callback:
+        progress_callback(3, 3, "🎉 Index generation complete")
     
     return index, embeddings, data
 
-def choose_by_hierarchy(user_entry, candidates):
-    """Choose the best candidate based on hierarchy if available"""
-    user_hierarchy = user_entry.get('Hierarchy')
-    if not user_hierarchy:
+
+# ---------------------------
+# Hierarchy tie-breaker functions
+# ---------------------------
+
+def _parse_hierarchy(hstr):
+    if not hstr:
+        return []
+    parts = hstr.replace('-', '.').split('.')
+    out = []
+    for p in parts:
+        if p.isdigit():
+            out.append(int(p))
+    return out
+
+
+def _hierarchy_distance(qh, bh):
+    q = _parse_hierarchy(qh)
+    b = _parse_hierarchy(bh)
+    if not q or not b:
+        return (0, float('inf'))
+    lcp = 0
+    for x, y in zip(q, b):
+        if x == y:
+            lcp += 1
+        else:
+            break
+    diff = abs(q[lcp] - b[lcp]) if lcp < min(len(q), len(b)) else abs(len(q) - len(b))
+    return (-lcp, diff)
+
+
+def choose_by_hierarchy(query_entry, candidates):
+    qh = query_entry.get("Hierarchy")
+    if not qh or not candidates:
         return candidates[0]
-    
-    for candidate in candidates:
-        if candidate.get('Hierarchy') == user_hierarchy:
-            return candidate
-    return candidates[0]
+    logger.info(f"[TieBreaker] Query hierarchy: {qh}, candidates: {[c.get('Hierarchy') for c in candidates]}")
+    best, best_key = None, (float('inf'), float('inf'))
+    for c in candidates:
+        key = _hierarchy_distance(qh, c.get("Hierarchy"))
+        logger.info(f"[TieBreaker] Comparing with {c.get('Hierarchy')} → distance {key}")
+        if key < best_key:
+            best, best_key = c, key
+    logger.info(f"[TieBreaker] Chosen candidate: {best.get('Hierarchy')} for query {qh}")
+    return best if best else candidates[0]
+
+
+# ---------------------------
+# Main similarity search
+# ---------------------------
 
 def search_similar(user_data, index, base_data, top_k, thresholds, model, progress_callback=None):
-    """Search for similar sentences using FAISS and exact matching"""
+    logger.info(f"Starting similarity search for {len(user_data)} queries against {len(base_data)} base items")
     results = []
-    exact_matches = {}
-    remaining_user_data = []
-    remaining_indices = []
-    text_to_candidates = {entry['Cleaned_Text']: [entry] for entry in base_data}
-    
+
     total_phases = 3
     current_phase = 0
     
-    # Phase 1: Exact string matching
     if progress_callback:
-        progress_callback(current_phase, total_phases, "🔍 Checking for exact matches...")
-    
+        progress_callback(current_phase, total_phases, "Initializing similarity search...")
+
+    # Map Cleaned_Text → list of base candidates
+    text_to_candidates = {}
+    for b in base_data:
+        text_to_candidates.setdefault(b['Cleaned_Text'], []).append(b)
+
+    exact_matches = {}
+    remaining_user_data, remaining_indices = [], []
+
+    # ========== PHASE 1: EXACT MATCH ==========
+    current_phase += 1
+    if progress_callback:
+        progress_callback(current_phase, total_phases, f"Processing exact matches ({len(user_data)} queries)...")
+
     for i, user_entry in enumerate(user_data):
         user_text = user_entry['Cleaned_Text']
-        if user_text in text_to_candidates:
-            chosen = choose_by_hierarchy(user_entry, text_to_candidates[user_text])
+        candidates = text_to_candidates.get(user_text, [])
+        if candidates:
+            chosen = candidates[0] if len(candidates) == 1 else choose_by_hierarchy(user_entry, candidates)
             query_words, match_words = highlight_word_differences(
                 user_entry['Original_Text'], chosen['Original_Text']
             )
@@ -228,23 +384,22 @@ def search_similar(user_data, index, base_data, top_k, thresholds, model, progre
             remaining_user_data.append(user_entry)
             remaining_indices.append(i)
 
-    # Log exact match results
     exact_count = len([i for i in exact_matches if exact_matches[i] and exact_matches[i][0]['Similarity_Score'] == 1.0])
     logger.info(f"Phase 1 complete: {exact_count} exact matches found, {len(remaining_user_data)} queries need embedding search")
 
-    # Phase 2: Embedding search
+    # ========== PHASE 2: EMBEDDING SEARCH ==========
     current_phase += 1
     if remaining_user_data:
         if progress_callback:
-            progress_callback(current_phase, total_phases, f"🔍 Processing embeddings ({len(remaining_user_data)} queries)...")
+            progress_callback(current_phase, total_phases, f"Processing embeddings ({len(remaining_user_data)} queries)...")
         
-        logger.info(f"Processing {len(remaining_user_data)} queries with embeddings")
+        logger.info(f"Processing {len(remaining_user_data)} queries with BGE-large embeddings")
         remaining_texts = [e['Cleaned_Text'] for e in remaining_user_data]
         user_embeddings = model.encode(remaining_texts, convert_to_numpy=True)
-        
+        user_embeddings = normalize(user_embeddings, axis=1, norm='l2')
+
         D, I = index.search(user_embeddings, top_k)
         
-        # Process search results
         for idx, rem_idx in enumerate(remaining_indices):
             user_entry = remaining_user_data[idx]
             exact_matches[rem_idx] = []
@@ -287,7 +442,6 @@ def search_similar(user_data, index, base_data, top_k, thresholds, model, progre
                     'Similarity_Score': round(rep_score, 2),
                     'Similarity_Level': label
                 }
-                # Add metadata
                 for key, value in user_entry.items():
                     if key not in ['Object_Identifier','Original_Text','Cleaned_Text','Truncated','Hierarchy']:
                         result_item[f'Query_{key}'] = value
@@ -300,34 +454,30 @@ def search_similar(user_data, index, base_data, top_k, thresholds, model, progre
     else:
         logger.info("Phase 2 skipped: No queries require embedding search")
         if progress_callback:
-            progress_callback(current_phase, total_phases, "🔍 Embedding search skipped (all exact matches)")
+            progress_callback(current_phase, total_phases, "Embedding search skipped (all exact matches)")
 
-    # Phase 3: Collect results
+    # ========== PHASE 3: COLLECT RESULTS ==========
     current_phase += 1
     if progress_callback:
-        progress_callback(current_phase, total_phases, "🔍 Collecting and finalizing results...")
+        progress_callback(current_phase, total_phases, "Collecting and finalizing results...")
 
-    # Collect results
     for i in range(len(user_data)):
         if i in exact_matches:
             results.extend(exact_matches[i])
 
-    # Create full embeddings array (for compatibility)
     full_user_embeddings = np.zeros((len(user_data), model.get_sentence_embedding_dimension()))
     if remaining_user_data:
         remaining_embeddings = model.encode([entry['Cleaned_Text'] for entry in remaining_user_data], 
-                                           convert_to_numpy=True, show_progress_bar=False)
+                                            convert_to_numpy=True, show_progress_bar=False)
         for idx, remaining_idx in enumerate(remaining_indices):
             full_user_embeddings[remaining_idx] = remaining_embeddings[idx]
 
-    # Final statistics
     embedding_count = len(remaining_user_data)
     logger.info(f"Search complete: {exact_count} exact matches, {embedding_count} via embeddings")
-    logger.info(f"API optimization: Saved ~{exact_count} embedding calls by using string match")
+    logger.info(f"Optimization: Saved ~{exact_count} embedding calls by using string match")
     logger.info(f"Total results generated: {len(results)}")
 
-    # Final progress update
     if progress_callback:
-        progress_callback(total_phases, total_phases, f"🔍 Search complete! {len(results)} results generated")
+        progress_callback(total_phases, total_phases, f"Search complete! {len(results)} results generated")
 
     return results, full_user_embeddings

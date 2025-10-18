@@ -1,31 +1,37 @@
 import os
 import json
 import logging
-from transformers import pipeline
+from groq import Groq
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+import requests
 import hashlib
 import tiktoken
 from app.config import (
-    LLM_MODEL, LLM_CACHE_FILE, SYSTEM_PROMPT_PATH, LLM_BATCH_TOKEN_LIMIT
+    GROQ_API_KEY, GROQ_MODEL, LLM_CACHE_FILE,
+    SYSTEM_PROMPT_PATH, LLM_BATCH_TOKEN_LIMIT,
+    GROQ_TEMPERATURE, GROQ_MAX_TOKENS, GROQ_REASONING_EFFORT
 )
 
 logger = logging.getLogger(__name__)
 
-# Initialize Hugging Face pipeline for local LLM
+# Initialize Groq client
+client = None
 try:
-    client = pipeline("text-generation", model=LLM_MODEL, device=-1)  # CPU for HF Spaces free tier
-    logger.info(f"Successfully initialized {LLM_MODEL} pipeline")
+    if not GROQ_API_KEY or GROQ_API_KEY == "":
+        logger.error("Groq API Key not configured. Please set GROQ_API_KEY environment variable.")
+    else:
+        client = Groq(api_key=GROQ_API_KEY)
+        logger.info("Groq client initialized successfully.")
 except Exception as e:
-    logger.error(f"Failed to initialize {LLM_MODEL} pipeline: {e}")
-    client = None
+    logger.error(f"Failed to initialize Groq client: {e}")
 
-# Load system prompt from external file for maintainability
+# Load system prompt from external file
 try:
     with open(SYSTEM_PROMPT_PATH, 'r', encoding='utf-8') as f:
         SYSTEM_PROMPT_TEMPLATE = f.read()
 except FileNotFoundError:
     logger.error(f"System prompt file not found at: {SYSTEM_PROMPT_PATH}")
-    SYSTEM_PROMPT_TEMPLATE = "Error: System prompt could not be loaded."  # Fallback
+    SYSTEM_PROMPT_TEMPLATE = "Error: System prompt could not be loaded."
 
 def compute_prompt_hash(prompt: str) -> str:
     """Compute a hash for a prompt."""
@@ -40,7 +46,6 @@ def get_user_llm_cache_file(user_session_id):
 def load_llm_cache(user_session_id=None):
     """Load cached LLM results for specific user."""
     if user_session_id is None:
-        # Fallback to global cache for backward compatibility
         cache_file = LLM_CACHE_FILE
     else:
         cache_file = get_user_llm_cache_file(user_session_id)
@@ -74,24 +79,39 @@ def estimate_tokens(text: str) -> int:
         encoding = tiktoken.get_encoding("cl100k_base")
         return len(encoding.encode(text, disallowed_special=()))
     except Exception:
-        # Fallback for when tiktoken might fail
         return len(text) // 4
 
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=4, max=10),
-    retry=retry_if_exception_type((RuntimeError, ValueError))
+    retry=retry_if_exception_type((requests.exceptions.RequestException,))
 )
 def _call_llm_api(full_prompt: str, num_pairs: int) -> dict:
-    """Helper function to make the LLM call using Hugging Face pipeline and handle responses."""
+    """Helper function to make the actual Groq API call and handle streaming responses."""
     content, prompt_tokens, completion_tokens = "", 0, 0
     try:
         prompt_tokens = estimate_tokens(full_prompt)
-        response = client(full_prompt, max_new_tokens=512, return_full_text=False, temperature=0.0)
-        content = response[0]['generated_text']
+        
+        # Create streaming completion
+        stream = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[{"role": "user", "content": full_prompt}],
+            temperature=GROQ_TEMPERATURE,
+            max_completion_tokens=GROQ_MAX_TOKENS,
+            top_p=1,
+            reasoning_effort=GROQ_REASONING_EFFORT,
+            stream=True,
+            stop=None
+        )
+        
+        # Collect streamed response
+        for chunk in stream:
+            if chunk.choices[0].delta.content:
+                content += chunk.choices[0].delta.content
+        
         completion_tokens = estimate_tokens(content)
         
-        # Parse JSON output (assuming model outputs JSON as per prompt)
+        # Parse JSON response
         json_str = content.strip().lstrip('```json').rstrip('```').strip()
         analysis = json.loads(json_str)
 
@@ -106,18 +126,44 @@ def _call_llm_api(full_prompt: str, num_pairs: int) -> dict:
             }
             for result in analysis
         ]
-        return {'results': results, 'tokens_used': {'prompt_tokens': prompt_tokens, 'completion_tokens': completion_tokens}}
+        return {
+            'results': results,
+            'tokens_used': {
+                'prompt_tokens': prompt_tokens,
+                'completion_tokens': completion_tokens
+            }
+        }
 
-    except (RuntimeError, ValueError, json.JSONDecodeError) as e:
+    except (requests.exceptions.RequestException, json.JSONDecodeError, ValueError) as e:
         error_type = type(e).__name__
         logger.error(f"LLM call failed due to {error_type}: {e}. Response: '{content}'")
         error_msg = f"{error_type} Error"
-        error_result = {'Similarity_Score': 'Error', 'Similarity_Level': error_msg, 'Remark': 'Error during analysis'}
-        return {'results': [error_result] * num_pairs, 'tokens_used': {'prompt_tokens': prompt_tokens, 'completion_tokens': completion_tokens}}
+        error_result = {
+            'Similarity_Score': 'Error',
+            'Similarity_Level': error_msg,
+            'Remark': 'Error during analysis'
+        }
+        return {
+            'results': [error_result] * num_pairs,
+            'tokens_used': {
+                'prompt_tokens': prompt_tokens,
+                'completion_tokens': completion_tokens
+            }
+        }
     except Exception as e:
         logger.error(f"An unexpected LLM error occurred: {e}. Response: '{content}'")
-        error_result = {'Similarity_Score': 'Error', 'Similarity_Level': 'LLM Call Failed', 'Remark': 'Model error occurred'}
-        return {'results': [error_result] * num_pairs, 'tokens_used': {'prompt_tokens': prompt_tokens, 'completion_tokens': completion_tokens}}
+        error_result = {
+            'Similarity_Score': 'Error',
+            'Similarity_Level': 'LLM API Call Failed',
+            'Remark': 'API error occurred'
+        }
+        return {
+            'results': [error_result] * num_pairs,
+            'tokens_used': {
+                'prompt_tokens': prompt_tokens,
+                'completion_tokens': completion_tokens
+            }
+        }
 
 def _process_batch(batch_pairs: list, cache: dict, user_session_id=None) -> dict:
     """Processes a single batch of sentence pairs against the LLM, using caching."""
@@ -132,7 +178,7 @@ def _process_batch(batch_pairs: list, cache: dict, user_session_id=None) -> dict
         logger.info(f"Returning cached LLM result for batch key: {cache_key[:10]}...")
         return cache[cache_key]
 
-    logger.info(f"Calling LLM for a batch of {len(batch_pairs)} pairs.")
+    logger.info(f"Calling Groq LLM for a batch of {len(batch_pairs)} pairs.")
     response = _call_llm_api(full_prompt, len(batch_pairs))
     
     # Only cache successful, valid results
@@ -144,11 +190,17 @@ def _process_batch(batch_pairs: list, cache: dict, user_session_id=None) -> dict
 def get_llm_analysis_batch(sentence_pairs: list, user_session_id=None) -> dict:
     """
     Analyzes sentence pairs by iteratively creating batches that respect token limits.
-    This avoids recursion errors and is more robust for production.
     """
     if not client:
-        error_result = {'Similarity_Score': 'Error', 'Similarity_Level': 'LLM Model Not Configured', 'Remark': 'Model initialization failed'}
-        return {'results': [error_result] * len(sentence_pairs), 'tokens_used': {}}
+        error_result = {
+            'Similarity_Score': 'Error',
+            'Similarity_Level': 'LLM API Key Not Configured',
+            'Remark': 'API key missing'
+        }
+        return {
+            'results': [error_result] * len(sentence_pairs),
+            'tokens_used': {}
+        }
 
     cache = load_llm_cache(user_session_id)
     all_results = [None] * len(sentence_pairs)
@@ -187,10 +239,14 @@ def get_llm_analysis_batch(sentence_pairs: list, user_session_id=None) -> dict:
     
     save_llm_cache(cache, user_session_id)
     
-    # Sanity check to ensure no results were missed
+    # Sanity check
     if None in all_results:
         logger.error("LLM analysis resulted in missing data points. Filling with errors.")
-        error_result = {'Similarity_Score': 'Error', 'Similarity_Level': 'Processing Error', 'Remark': 'Results missing'}
+        error_result = {
+            'Similarity_Score': 'Error',
+            'Similarity_Level': 'Processing Error',
+            'Remark': 'Results missing'
+        }
         all_results = [res if res is not None else error_result for res in all_results]
 
     return {'results': all_results, 'tokens_used': total_tokens_used}

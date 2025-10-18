@@ -11,20 +11,22 @@ OUTPUT_DIR = os.path.join(BASE_DIR, 'data', 'output')
 PROMPT_DIR = os.path.join(BASE_DIR, 'app', 'prompts')
 
 # Cache files
-LLM_CACHE_FILE = os.path.join(CACHE_DIR, "llm_results_cache.json") # Changed from .pkl to .json for security
-BASE_EMBEDDINGS_FILE = os.path.join(CACHE_DIR, "base_embeddings.npy") # Using numpy safe format
+LLM_CACHE_FILE = os.path.join(CACHE_DIR, "llm_results_cache.json")
+BASE_EMBEDDINGS_FILE = os.path.join(CACHE_DIR, "base_embeddings.npy")
 FAISS_INDEX_FILE = os.path.join(CACHE_DIR, "base_index.faiss")
 HASH_FILE = os.path.join(CACHE_DIR, "base_file_hash.txt")
 
-# ---- Embedding Model Configuration ----
-# Using local Hugging Face model for embeddings
-HF_MODEL_NAME = 'intfloat/e5-large-v2'
+# ---- Embedding Model Configuration (HuggingFace) ----
+# Using BGE-large-en-v1.5 - state-of-the-art open-source embedding model
+EMBEDDING_MODEL_NAME = 'BAAI/bge-large-en-v1.5'  # Or 'BAAI/bge-large-en' for older version
+EMBEDDING_DIMENSION = 1024  # BGE-large produces 1024-dim embeddings
+EMBEDDING_BATCH_SIZE = 32  # Adjust based on your GPU/CPU
+EMBEDDING_DEVICE = 'cuda'  # Change to 'cpu' if no GPU available
 
 # Prompt file for maintainability
 SYSTEM_PROMPT_PATH = os.path.join(PROMPT_DIR, 'system_prompt.txt')
 
 # ---- Thresholds and Limits ----
-# Similarity levels
 DEFAULT_THRESHOLDS = {
     'exact': 1.0,
     'most': 0.9,
@@ -34,16 +36,19 @@ DEFAULT_THRESHOLDS = {
 # File size limit (10MB)
 MAX_FILE_SIZE = 10 * 1024 * 1024
 
-# Centralized configuration for scattered constants
+# Centralized configuration
 MAX_TOKENS_FOR_TRUNCATION = 512
 LLM_BATCH_TOKEN_LIMIT = 100000
 
 # ---- Logging ----
 LOG_LEVEL = 'INFO'
 
-# ---- LLM Configuration ----
-# Using local Hugging Face model for LLM
-LLM_MODEL = 'microsoft/Phi-3-mini-4k-instruct'
+# ---- LLM Configuration (Groq) ----
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")  # Set via environment variable
+GROQ_MODEL = "openai/gpt-oss-20b"  # As per your example
+GROQ_TEMPERATURE = 0.0  # Lower for deterministic outputs
+GROQ_MAX_TOKENS = 8192
+GROQ_REASONING_EFFORT = "medium"
 
 # LLM Optimization
 LLM_ANALYSIS_MIN_THRESHOLD = 0.4

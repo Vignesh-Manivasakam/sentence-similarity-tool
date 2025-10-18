@@ -9,7 +9,7 @@ from app import core
 for handler in logging.root.handlers[:]:
     logging.root.handlers.remove(handler)
 
-# Set the log level from config
+# Set the log level from config (we can import config early for this)
 from app.config import LOG_LEVEL
 log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
 os.makedirs(log_dir, exist_ok=True)
@@ -30,8 +30,8 @@ logging.getLogger('').addHandler(console_handler)
 
 logging.info("Logging configured successfully.")
 
-# Set page config and import the rest of the app modules
-st.set_page_config(layout="wide", page_title="Similarity Analysis Tool")
+# Now, set page config and import the rest of your app modules
+st.set_page_config(layout="wide", page_title="AIS")
 
 from app.config import (
     DEFAULT_THRESHOLDS, MAX_FILE_SIZE,
@@ -41,6 +41,9 @@ from app.pipeline import run_similarity_pipeline
 from app.postprocess import display_summary, create_highlighted_excel, df_to_html_table
 from app.utils import plot_embeddings
 from app.llm_service import get_llm_analysis_batch
+
+
+# Add these functions to app.py after the imports
 
 def initialize_user_session():
     """Initialize user session if not exists"""
@@ -140,9 +143,17 @@ def load_sidebar():
                             base_file = None
                             st.session_state.base_file_data = None
                             st.session_state.base_columns = []
-            
+                    
+                    # Use cached data for column selection
+                    if st.session_state.base_file_data is not None:
+                        st.markdown('<p class="upload-success">✅ Base file uploaded!</p>', unsafe_allow_html=True)
+                        base_id_col = st.selectbox("Select Base Identifier Column", st.session_state.base_columns, key="base_id_col")
+                        base_text_col = st.selectbox("Select Base Text Column", st.session_state.base_columns, key="base_text_col")
+                        remaining_cols = [c for c in st.session_state.base_columns if c not in [base_id_col, base_text_col]]
+                        base_meta_cols = st.multiselect("Select Base additional Columns (Optional)", remaining_cols, key="base_meta_cols")
+
             # --- Check File Logic with Session State ---
-            check_file = st.file_uploader("Check Excel File 📑", type=["xlsx"])
+            check_file = st.file_uploader("Check Excel File 📝", type=["xlsx"])
             check_id_col, check_text_col, check_meta_cols = None, None, []
             
             if check_file:
@@ -150,6 +161,7 @@ def load_sidebar():
                     st.error(f"Check file size exceeds {MAX_FILE_SIZE/1024/1024}MB limit")
                     check_file = None
                 else:
+                    # Check if we need to reprocess the check file
                     file_changed = st.session_state.last_check_file_name != check_file.name
                     
                     if file_changed or st.session_state.check_file_data is None:
@@ -164,39 +176,47 @@ def load_sidebar():
                             check_file = None
                             st.session_state.check_file_data = None
                             st.session_state.check_columns = []
-            
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        # --- Column Selection ---
-        with st.expander("Column Selection", expanded=True):
-            if st.session_state.base_columns:
-                base_id_col = st.selectbox("Base Identifier Column", st.session_state.base_columns)
-                base_text_col = st.selectbox("Base Text Column", st.session_state.base_columns)
-                base_meta_cols = st.multiselect("Base Metadata Columns (optional)", 
-                                              [col for col in st.session_state.base_columns 
-                                               if col not in [base_id_col, base_text_col]])
-            
-            if st.session_state.check_columns:
-                check_id_col = st.selectbox("Check Identifier Column", st.session_state.check_columns)
-                check_text_col = st.selectbox("Check Text Column", st.session_state.check_columns)
-                check_meta_cols = st.multiselect("Check Metadata Columns (optional)", 
-                                               [col for col in st.session_state.check_columns 
-                                                if col not in [check_id_col, check_text_col]])
-        
-        # --- Settings ---
-        with st.expander("Settings", expanded=False):
-            top_k = st.slider("Top K Matches", min_value=1, max_value=10, value=5)
-            run_btn = st.button("🚀 Run Similarity Analysis")
-        
-        display_session_info()
-        cleanup_old_sessions()
-        
-        return base_file, check_file, top_k, run_btn, base_id_col, base_text_col, check_id_col, check_text_col, base_meta_cols, check_meta_cols
+                    
+                    # Use cached data for column selection
+                    if st.session_state.check_file_data is not None:
+                        st.markdown('<p class="upload-success">✅ Target file uploaded!</p>', unsafe_allow_html=True)
+                        check_id_col = st.selectbox("Select Target Identifier Column", st.session_state.check_columns, key="check_id_col")
+                        check_text_col = st.selectbox("Select Target Text Column", st.session_state.check_columns, key="check_text_col")
+                        remaining_cols = [c for c in st.session_state.check_columns if c not in [check_id_col, check_text_col]]
+                        check_meta_cols = st.multiselect("Select Target additional Columns (Optional)", remaining_cols, key="check_meta_cols")
 
+            top_k = st.number_input("Top K Matches 🎯", min_value=1, max_value=10, value=3)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        with st.expander("Relationship Classification Guide", expanded=False):
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            cols = st.columns(1)
+            with cols[0]:
+                st.markdown("""
+                ✅ **Exact Match**: 1.0  
+                *Perfect string*
+                
+                🟢 **Equivalent**: 0.95 - 1.0  
+                *Same meaning, different wording*
+                """)
+                st.markdown("""
+                🟡 **Related**: 0.50 - 0.94  
+                *Related concepts, partial overlap*
+                
+                🔴 **Contradictory**: 0.00 - 0.20  
+                *Opposite/conflicting meanings*
+                """)
+            st.markdown('</div>', unsafe_allow_html=True)
+        run_btn = st.button("🚀 Run Similarity Search")
+        
+    return base_file, check_file, top_k, run_btn, base_id_col, base_text_col, check_id_col, check_text_col, base_meta_cols, check_meta_cols
 def main():
-    """Main function to run the Streamlit app"""
+    """Main function to run the Streamlit application."""
+    st.markdown("<h1 style='text-align: center;'>📘 AIS — 🧠AI Based similarity Assist🔍</h1>", unsafe_allow_html=True)
+    st.markdown("<h6 style='text-align: center;'>For any Queries Contact: Vignesh Manivasakam (MS/ENP42-VM) </h6>", unsafe_allow_html=True)
     # Initialize user session
     user_session_id = initialize_user_session()
+    # ADD THIS LINE - Initialize file session state
     initialize_file_session()
     
     try:
@@ -205,6 +225,7 @@ def main():
     except FileNotFoundError:
         st.warning("Custom CSS file not found. Using default styling.")
 
+    # *** UPDATED: Removed thresholds from unpacking ***
     base_file, check_file, top_k, run_btn, base_id_col, base_text_col, check_id_col, check_text_col, base_meta_cols, check_meta_cols = load_sidebar()
 
     if 'results_df' not in st.session_state:
@@ -220,7 +241,7 @@ def main():
             st.warning("⚠️ Please select identifier and text columns for both files.")
             return
     
-        # Column validation
+        # ✅ Column validation
         if base_id_col == base_text_col:
             st.error("❌ **Base file error**: You selected the same column for both Identifier and Text. Please choose different columns!")
             return
@@ -229,14 +250,17 @@ def main():
             st.error("❌ **Check file error**: You selected the same column for both Identifier and Text. Please choose different columns!")
             return
         
-        # Unified progress pipeline
+        # ========== UNIFIED PROGRESS PIPELINE ==========
         with st.spinner("Running integrated similarity search with LLM analysis..."):
+            # *** NEW: Create unified progress bar ***
             unified_progress = st.progress(0, text="🚀 Initializing pipeline...")
             
+            # *** NEW: Create progress manager ***
             from app.progress_manager import UnifiedProgressManager
             progress_manager = UnifiedProgressManager(unified_progress)
             
             try:
+                # *** UPDATED: Pass progress manager instead of individual callbacks ***
                 results, base_embeddings, user_embeddings, base_data, user_data, base_skipped_count, user_skipped_count, llm_tokens = run_similarity_pipeline(
                     base_file, check_file, top_k, None, progress_manager,  
                     base_id_col, base_text_col, check_id_col, check_text_col,
@@ -252,17 +276,19 @@ def main():
                 st.session_state.stats = (base_skipped_count, user_skipped_count)
                 st.session_state.total_tokens = llm_tokens
                 
+                # *** UPDATED: Final success message ***
                 unified_progress.progress(1.0, text="🎉 All phases complete!")
                 st.success("✅ Similarity Search + LLM Analysis Complete!")
                 
             except Exception as e:
                 st.error(f"❌ An error occurred during pipeline: {e}")
                 logging.error(f"Pipeline error: {e}", exc_info=True)
+                # *** NEW: Show error in progress bar ***
                 if 'unified_progress' in locals():
                     unified_progress.progress(0.0, text=f"❌ Pipeline failed: {str(e)[:50]}...")
                 return
 
-    # Display results
+    # ========== DISPLAY RESULTS ==========
     if st.session_state.results_df is not None:
         df = st.session_state.results_df
         base_data = st.session_state.base_data
@@ -278,7 +304,7 @@ def main():
             st.subheader("📈 Summary")
             display_summary(df.to_dict('records'))
 
-        # Results table
+        # ========== RESULTS TABLE ==========
         st.subheader("📋 Results Table")
         note = f"**Note**: Skipped {base_skipped} base and {user_skipped} query entries due to empty or invalid text."
         if 'Similarity_Level' in df.columns:
@@ -289,7 +315,7 @@ def main():
         # Display table
         st.markdown(df_to_html_table(df, base_data, user_data), unsafe_allow_html=True)
 
-        # Download section
+        # ========== DOWNLOAD SECTION ==========
         st.subheader("📥 Download Results")
         st.markdown("Download the results table with LLM analysis in your preferred format.")
         download_container = st.container()

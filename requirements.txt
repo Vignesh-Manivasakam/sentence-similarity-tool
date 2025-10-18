@@ -1,12 +1,24 @@
-streamlit==1.38.0
-pandas==2.2.2
-numpy==1.26.4
-faiss-cpu==1.8.0
-sentence-transformers==3.0.1
-transformers==4.44.2
-torch==2.4.1
-plotly==5.24.1
-openpyxl==3.1.5
-tiktoken==0.7.0
-pint==0.23
-tenacity==9.0.0
+# Core dependencies
+streamlit==1.31.0
+pandas==2.1.4
+numpy==1.26.3
+openpyxl==3.1.2
+
+# Machine Learning & Embeddings
+sentence-transformers==2.3.1
+torch==2.1.2
+faiss-cpu==1.7.4
+scikit-learn==1.4.0
+
+# LLM Integration
+groq==0.4.2
+tiktoken==0.5.2
+
+# Utilities
+tenacity==8.2.3
+plotly==5.18.0
+requests==2.31.0
+
+# Optional: For GPU support
+# faiss-gpu==1.7.4
+# torch==2.1.2+cu118  # Adjust for your CUDA version
