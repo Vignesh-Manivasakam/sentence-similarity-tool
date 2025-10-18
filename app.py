@@ -2,33 +2,46 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 import sys
+import tempfile
 import pandas as pd
 import streamlit as st
 from app import core  
 
+# Clear any existing handlers
 for handler in logging.root.handlers[:]:
     logging.root.handlers.remove(handler)
 
-# Set the log level from config (we can import config early for this)
+# Set the log level from config
 from app.config import LOG_LEVEL
-log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+
+# ✅ FIX: Use temp directory for HuggingFace Spaces compatibility
+log_dir = os.path.join(tempfile.gettempdir(), 'ais_logs')
 os.makedirs(log_dir, exist_ok=True)
 log_file = os.path.join(log_dir, 'app.log')
 
-# Create handlers
-file_handler = RotatingFileHandler(
-    log_file, mode='a', maxBytes=5*1024*1024, backupCount=5, encoding='utf-8'
-)
-file_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+# Create handlers with error handling
+try:
+    file_handler = RotatingFileHandler(
+        log_file, mode='a', maxBytes=5*1024*1024, backupCount=2, encoding='utf-8'
+    )
+    file_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    logging.getLogger('').addHandler(file_handler)
+    logging.info(f"File logging enabled at: {log_file}")
+except PermissionError as e:
+    # If file logging fails (shouldn't happen in /tmp, but just in case)
+    print(f"Warning: Could not create log file at {log_file}: {e}")
+    print("Continuing with console logging only...")
+
+# Console handler (always works)
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+logging.getLogger('').addHandler(console_handler)
 
 # Configure root logger
 logging.getLogger('').setLevel(LOG_LEVEL.upper())
-logging.getLogger('').addHandler(file_handler)
-logging.getLogger('').addHandler(console_handler)
 
-logging.info("Logging configured successfully.")
+logging.info("Logging configured successfully for HuggingFace Spaces deployment.")
+logging.info(f"Log directory: {log_dir}")
 
 # Now, set page config and import the rest of your app modules
 st.set_page_config(layout="wide", page_title="AIS")
@@ -212,7 +225,7 @@ def load_sidebar():
     return base_file, check_file, top_k, run_btn, base_id_col, base_text_col, check_id_col, check_text_col, base_meta_cols, check_meta_cols
 def main():
     """Main function to run the Streamlit application."""
-    st.markdown("<h1 style='text-align: center;'>📘 AIS — 🧠AI Based similarity Assist🔍</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>📘 AI similarity Assist Tool🔍</h1>", unsafe_allow_html=True)
     st.markdown("<h6 style='text-align: center;'>For any Queries Contact: Vignesh Manivasakam (MS/ENP42-VM) </h6>", unsafe_allow_html=True)
     # Initialize user session
     user_session_id = initialize_user_session()
@@ -336,7 +349,7 @@ def main():
                 st.download_button(
                     label="💾 Download JSON Results",
                     data=df.to_json(orient="records", indent=2),
-                    file_name="similarity_results_with_llm.json",
+                    file_name="similarity_results_llm.json",
                     mime="application/json",
                     key="json_download"
                 )

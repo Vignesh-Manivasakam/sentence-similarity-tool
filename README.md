@@ -27,3 +27,5 @@ A Streamlit app for analyzing similarity between sentences in Excel files using 
 - Visualizations and downloads
 
 Built with Streamlit, SentenceTransformers, Transformers, and Plotly.
+
+
