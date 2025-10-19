@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 client = None
 try:
     if not GROQ_API_KEY or GROQ_API_KEY == "":
-        logger.error("Groq API Key not configured. Please set GROQ_API_KEY environment variable.")
+        logger.error("Groq API Key not configured. Please set GROQ_API_KEY in HuggingFace Space secrets.")
+        logger.error("Go to: Settings → Repository secrets → Add GROQ_API_KEY")
     else:
         client = Groq(api_key=GROQ_API_KEY)
         logger.info("Groq client initialized successfully.")
@@ -31,7 +32,24 @@ try:
         SYSTEM_PROMPT_TEMPLATE = f.read()
 except FileNotFoundError:
     logger.error(f"System prompt file not found at: {SYSTEM_PROMPT_PATH}")
-    SYSTEM_PROMPT_TEMPLATE = "Error: System prompt could not be loaded."
+    SYSTEM_PROMPT_TEMPLATE = """You are an expert text similarity analyzer. For each sentence pair provided, analyze their semantic similarity and provide:
+
+1. A similarity score (0.0 to 1.0)
+2. A relationship classification: "Exact Match", "Most Similar", "Moderately Similar", or "No Match"
+3. A brief remark explaining the key differences or similarities
+
+Format your response as a JSON array with one object per pair:
+
+[
+  {
+    "score": 0.95,
+    "relationship": "Most Similar",
+    "remark": "Same core concept, minor wording differences"
+  }
+]
+
+Analyze these sentence pairs:
+"""
 
 def compute_prompt_hash(prompt: str) -> str:
     """Compute a hash for a prompt."""
@@ -89,34 +107,74 @@ def estimate_tokens(text: str) -> int:
 def _call_llm_api(full_prompt: str, num_pairs: int) -> dict:
     """Helper function to make the actual Groq API call and handle streaming responses."""
     content, prompt_tokens, completion_tokens = "", 0, 0
+    
+    # Check if client is initialized
+    if client is None:
+        logger.error("Groq client is not initialized. Check your API key configuration.")
+        error_result = {
+            'Similarity_Score': 'Error',
+            'Similarity_Level': 'API Key Missing',
+            'Remark': 'Groq API key not configured'
+        }
+        return {
+            'results': [error_result] * num_pairs,
+            'tokens_used': {'prompt_tokens': 0, 'completion_tokens': 0}
+        }
+    
     try:
         prompt_tokens = estimate_tokens(full_prompt)
         
-        # Create streaming completion
+        # ✅ FIX: Updated Groq API call with proper response handling
         stream = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[{"role": "user", "content": full_prompt}],
             temperature=GROQ_TEMPERATURE,
-            max_completion_tokens=GROQ_MAX_TOKENS,
+            max_tokens=GROQ_MAX_TOKENS,
             top_p=1,
-            reasoning_effort=GROQ_REASONING_EFFORT,
             stream=True,
             stop=None
         )
         
-        # Collect streamed response
+        # ✅ FIX: Proper handling of streaming response
         for chunk in stream:
-            if chunk.choices[0].delta.content:
-                content += chunk.choices[0].delta.content
+            # Handle different response structures
+            if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
+                delta = chunk.choices[0].delta
+                # Check if delta has content attribute
+                if hasattr(delta, 'content') and delta.content:
+                    content += delta.content
+                # Alternative: check if it's a dict
+                elif isinstance(delta, dict) and 'content' in delta and delta['content']:
+                    content += delta['content']
         
         completion_tokens = estimate_tokens(content)
         
         # Parse JSON response
-        json_str = content.strip().lstrip('```json').rstrip('```').strip()
+        json_str = content.strip()
+        # Remove markdown code blocks if present
+        if json_str.startswith('```'):
+            json_str = json_str.split('```')[1]
+            if json_str.startswith('json'):
+                json_str = json_str[4:]
+            json_str = json_str.strip()
+        
         analysis = json.loads(json_str)
 
         if not isinstance(analysis, list) or len(analysis) != num_pairs:
-            raise ValueError(f"LLM response length mismatch. Expected {num_pairs}, got {len(analysis)}")
+            logger.warning(f"LLM response length mismatch. Expected {num_pairs}, got {len(analysis) if isinstance(analysis, list) else 'non-list'}")
+            # Pad or truncate as needed
+            if isinstance(analysis, list):
+                if len(analysis) < num_pairs:
+                    # Pad with default values
+                    default_result = {
+                        'score': 0.5,
+                        'relationship': 'Unknown',
+                        'remark': 'Analysis incomplete'
+                    }
+                    analysis.extend([default_result] * (num_pairs - len(analysis)))
+                else:
+                    # Truncate
+                    analysis = analysis[:num_pairs]
 
         results = [
             {
@@ -134,14 +192,26 @@ def _call_llm_api(full_prompt: str, num_pairs: int) -> dict:
             }
         }
 
-    except (requests.exceptions.RequestException, json.JSONDecodeError, ValueError) as e:
-        error_type = type(e).__name__
-        logger.error(f"LLM call failed due to {error_type}: {e}. Response: '{content}'")
-        error_msg = f"{error_type} Error"
+    except json.JSONDecodeError as e:
+        logger.error(f"LLM JSON decode failed: {e}. Response: '{content[:500]}'")
         error_result = {
             'Similarity_Score': 'Error',
-            'Similarity_Level': error_msg,
-            'Remark': 'Error during analysis'
+            'Similarity_Level': 'JSON Parse Error',
+            'Remark': f'Could not parse LLM response'
+        }
+        return {
+            'results': [error_result] * num_pairs,
+            'tokens_used': {
+                'prompt_tokens': prompt_tokens,
+                'completion_tokens': completion_tokens
+            }
+        }
+    except requests.exceptions.RequestException as e:
+        logger.error(f"LLM API request failed: {e}")
+        error_result = {
+            'Similarity_Score': 'Error',
+            'Similarity_Level': 'API Request Failed',
+            'Remark': 'Network or API error'
         }
         return {
             'results': [error_result] * num_pairs,
@@ -151,11 +221,11 @@ def _call_llm_api(full_prompt: str, num_pairs: int) -> dict:
             }
         }
     except Exception as e:
-        logger.error(f"An unexpected LLM error occurred: {e}. Response: '{content}'")
+        logger.error(f"Unexpected LLM error: {e}", exc_info=True)
         error_result = {
             'Similarity_Score': 'Error',
-            'Similarity_Level': 'LLM API Call Failed',
-            'Remark': 'API error occurred'
+            'Similarity_Level': 'LLM Error',
+            'Remark': f'Unexpected error: {type(e).__name__}'
         }
         return {
             'results': [error_result] * num_pairs,
@@ -182,7 +252,7 @@ def _process_batch(batch_pairs: list, cache: dict, user_session_id=None) -> dict
     response = _call_llm_api(full_prompt, len(batch_pairs))
     
     # Only cache successful, valid results
-    if all(res.get('Similarity_Level') not in ['Error', 'Parse Error'] for res in response['results']):
+    if all(res.get('Similarity_Level') not in ['Error', 'Parse Error', 'API Key Missing'] for res in response['results']):
         cache[cache_key] = response
         
     return response
@@ -192,14 +262,15 @@ def get_llm_analysis_batch(sentence_pairs: list, user_session_id=None) -> dict:
     Analyzes sentence pairs by iteratively creating batches that respect token limits.
     """
     if not client:
+        logger.warning("Groq client not initialized. LLM analysis will be skipped.")
         error_result = {
             'Similarity_Score': 'Error',
             'Similarity_Level': 'LLM API Key Not Configured',
-            'Remark': 'API key missing'
+            'Remark': 'Please add GROQ_API_KEY to HuggingFace Space secrets'
         }
         return {
             'results': [error_result] * len(sentence_pairs),
-            'tokens_used': {}
+            'tokens_used': {'prompt_tokens': 0, 'completion_tokens': 0}
         }
 
     cache = load_llm_cache(user_session_id)
