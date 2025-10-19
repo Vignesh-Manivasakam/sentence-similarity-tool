@@ -7,8 +7,6 @@ sdk: docker
 app_port: 7860
 pinned: false
 ---
-<div align="center">
-
 # 📘 AI Similarity Assist Tool 🔍
 
 <div align="center">
@@ -88,7 +86,7 @@ This dual-layer approach ensures both speed and accuracy, making it perfect for 
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     Streamlit Web Interface                  │
+│                     Streamlit Web Interface                 │
 ├─────────────────────────────────────────────────────────────┤
 │  File Upload  →  Column Selection  →  Run Analysis          │
 └─────────────────────┬───────────────────────────────────────┘
@@ -109,7 +107,7 @@ This dual-layer approach ensures both speed and accuracy, making it perfect for 
 │ • Index Cache  │                          │ • Token Tracking │
 │ • Exact Match  │                          │ • Result Cache   │
 └────────────────┘                          └──────────────────┘
-        │                                             │
+        │                                            │
         └─────────────┬──────────────────────────────┘
                       │
         ┌─────────────▼─────────────┐
@@ -311,7 +309,7 @@ When multiple entries have identical similarity scores, the tool uses hierarchic
 ## 🎨 Screenshots
 
 ### Main Interface
-![Main Interface](https://via.placeholder.com/800x400?text=File+Upload+%26+Configuration)
+![Main Interface](docs\images\Main_Interface.png)
 *Upload files, select columns, and configure analysis parameters*
 
 ### Processing Pipeline
