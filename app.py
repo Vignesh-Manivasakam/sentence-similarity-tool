@@ -225,7 +225,7 @@ def load_sidebar():
     return base_file, check_file, top_k, run_btn, base_id_col, base_text_col, check_id_col, check_text_col, base_meta_cols, check_meta_cols
 def main():
     """Main function to run the Streamlit application."""
-    st.markdown("<h1 style='text-align: center;'>📘 AI similarity Assist Tool🔍</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>📘 AI Similarity Assist Tool🔍</h1>", unsafe_allow_html=True)
     # Initialize user session
     user_session_id = initialize_user_session()
     # ADD THIS LINE - Initialize file session state
