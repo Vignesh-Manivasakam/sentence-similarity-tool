@@ -309,19 +309,22 @@ When multiple entries have identical similarity scores, the tool uses hierarchic
 ## 🎨 Screenshots
 
 ### Main Interface
-![Main Interface](docs\images\Main_Interface.png)
+![Main Interface](docs/images/Main_Interface.png)
 *Upload files, select columns, and configure analysis parameters*
 
 ### Processing Pipeline
-![Processing](https://via.placeholder.com/800x400?text=Unified+Progress+Tracking)
+![Processing](docs/images/Processing.png)
 *Real-time progress across preprocessing, FAISS search, and LLM analysis*
 
 ### Results Dashboard
-![Results](https://via.placeholder.com/800x400?text=Interactive+Results+%26+Visualizations)
+![LLM_Embedding_Visualisation](docs/images/LLM_Emedding_Visualisation.png)
+![FAISS_PLOT](docs/images/FAISS_Plot.png)
+![COMBINED_PLOT](docs/images/Combined_Table.png)
+
 *Comprehensive summary with FAISS and LLM insights*
 
 ### Results Table
-![Table](https://via.placeholder.com/800x400?text=Detailed+Match+Results)
+![Table](docs/images/Result_table.png)
 *Color-coded relationships with highlighted text differences*
 
 ---
