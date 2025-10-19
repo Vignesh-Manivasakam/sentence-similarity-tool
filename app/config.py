@@ -3,7 +3,7 @@ import uuid
 import tempfile
 from datetime import datetime, timedelta
 
-os.environ["GROQ_API_KEY"] = "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"
+
 
 # ✅ FIX: Use temporary directory for HuggingFace Spaces
 # This ensures compatibility with read-only filesystems
