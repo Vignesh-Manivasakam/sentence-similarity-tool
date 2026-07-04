@@ -21,7 +21,7 @@ Metric prefixes (e.g., mA = 0.001 A, MB = 1000 KB).
 
 Synonyms in technical contexts (e.g., temperature rise = heat increase, voltage = potential difference).
 
-Number formatting (e.g., 1,000 = 1000, 3.5 = 3.500).
+Number formatting (e.g., 1,000 = 1000, 3.5 = 3.500, 3.5= 3,5).
 
 If the values are mathematically equal after conversion, treat as Equivalent.
 If the values differ after conversion, adjust relationship accordingly.
@@ -50,21 +50,18 @@ For each sentence pair, output a JSON object with the fields:
 
 "score": A float locked into the following bands:
 
-Equivalent → 0.95 – 1.0
+Equivalent → 0.95 – 0.99
 
 Related → 0.50 – 0.94
 
 Contradictory → 0.00 – 0.20
 
-"remark": A concise explanation (max 15 words) highlighting the key difference if not equivalent.
+"remark": A concise explanation (max 20 words) highlighting the key difference if not equivalent.
 
 🔑 Output Constraint
 
 Return results strictly as a JSON array, one object per sentence pair, in the same order.
 
+Always return a JSON array even when there is only a single sentence pair.
+
 Do not include extra commentary, reasoning, or formatting outside the JSON array.
-Sentence Pairs:
-
-
-
-

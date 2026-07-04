@@ -1,0 +1,24 @@
+{
+  "active_version": "v1",
+  "canary_version": null,
+  "versions": {
+    "v1": {
+      "version": "v1",
+      "filename": "system_prompt_v1.txt",
+      "created_at": "2026-06-21T06:53:22.723883+00:00",
+      "created_by": "system",
+      "finding": "Initial version \u2014 original hand-crafted system prompt.",
+      "supporting_statistic": null,
+      "shadow_test_improvement": null,
+      "approved_by": "system",
+      "approved_at": "2026-06-21T06:53:22.723883+00:00",
+      "status": "active",
+      "canary_start_at": null,
+      "canary_sessions_count": 0,
+      "canary_agreement_rate": null,
+      "full_rollout_at": null,
+      "retired_at": null,
+      "retire_reason": null
+    }
+  }
+}

@@ -1,392 +1,103 @@
----
-title: Sentence Similarity Analysis Tool
-emoji: 🚀
-colorFrom: blue
-colorTo: green
-sdk: docker
-app_port: 7860
-pinned: false
----
-# 📘 AI Similarity Assist Tool 🔍
+# 🔍 AI Requirement Similarity Assistant (AIS Assist)
 
-<div align="center">
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.38.0-FF4B4B.svg)](https://streamlit.io/)
+[![ChromaDB](https://img.shields.io/badge/ChromaDB-0.4.24-orange.svg)](https://www.trychroma.com/)
+[![NVIDIA NIM](https://img.shields.io/badge/NVIDIA_NIM-meta/llama--3.1--70b--instruct-green.svg)](https://build.nvidia.com/)
+[![Status](https://img.shields.io/badge/Status-Public_POC-success.svg)](#)
 
-![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-FF4B4B.svg)
-![HuggingFace](https://img.shields.io/badge/🤗%20HuggingFace-Deployed-yellow.svg)
-![License](https://img.shields.io/badge/License-MIT-green.svg)
-![Status](https://img.shields.io/badge/Status-Active-success.svg)
-
-**An intelligent dual-analysis system combining FAISS vector similarity with LLM-powered semantic understanding**
-
-[🚀 Live Demo](https://huggingface.co/spaces/Vignesh0503/sentence-similarity-tool) • [📖 Documentation](#features) • [🎯 Use Cases](#use-cases) • [⚡ Quick Start](#quick-start)
-
-</div>
+An intelligent, production-ready requirements comparison and compliance engineering workbench. It automates compliance reviews between incoming customer specifications and legacy engineering documents. By integrating **ChromaDB** collections, **NVIDIA NIM** endpoints, and a **Dual-Layer Memory & Self-Improvement Loop**, it maximizes matching accuracy while reducing API token consumption by up to 60%.
 
 ---
 
-## 🌟 Overview
+## 🏗️ System Architecture & Processing Pipeline
 
-The **AI Similarity Assist Tool** is a production-ready Streamlit application that revolutionizes text similarity analysis by combining two powerful approaches:
-
-1. **⚡ FAISS Vector Search**: Lightning-fast embedding-based similarity using BGE-large-en-v1.5
-2. **🧠 LLM Semantic Analysis**: Deep relationship understanding powered by Groq's GPT-OSS-20B
-
-This dual-layer approach ensures both speed and accuracy, making it perfect for document comparison, duplicate detection, semantic search, and content analysis tasks.
-
----
-
-## ✨ Key Features
-
-### 🎯 **Dual Analysis Engine**
-- **FAISS Similarity**: Efficient vector-based matching with cosine similarity scores
-- **LLM Analysis**: Contextual relationship classification (Exact Match, Equivalent, Related, Contradictory)
-- **Hybrid Results**: Get both quantitative scores and qualitative insights
-
-### 🚀 **Performance Optimized**
-- **Smart Caching**: User-specific session management with automatic cleanup
-- **Exact Match Detection**: Bypasses embedding for identical strings (saves 50%+ compute time)
-- **Batch Processing**: Efficient LLM calls with token-aware batching
-- **Progress Tracking**: Real-time unified progress indicators across all phases
-
-### 📊 **Rich Visualizations**
-- **3D Embedding Plot**: Interactive Plotly visualization of semantic space
-- **Comparative Charts**: Distribution analysis for both FAISS and LLM results
-- **Token Usage Metrics**: Track LLM consumption for cost optimization
-- **Detailed Statistics**: Comprehensive breakdown by relationship types
-
-### 💾 **Export & Integration**
-- **Excel Export**: Highlighted differences with color-coded relationships
-- **JSON Export**: Structured data for downstream processing
-- **Metadata Support**: Preserve additional columns from source files
-- **Truncation Indicators**: Visual warnings for processed long texts
-
-### 🔧 **Enterprise Ready**
-- **Multi-User Support**: Isolated sessions for concurrent users (up to 100)
-- **Automatic Cleanup**: 24-hour session timeout with garbage collection
-- **Error Handling**: Graceful degradation with fallback mechanisms
-- **Logging**: Comprehensive tracking for debugging and monitoring
-
----
-
-## 🎯 Use Cases
-
-| Domain | Application |
-|--------|-------------|
-| 📄 **Legal & Compliance** | Contract comparison, clause matching, regulatory alignment |
-| 🏢 **Enterprise Data** | Duplicate detection, data deduplication, record linkage |
-| 📚 **Content Management** | Plagiarism detection, content similarity, version tracking |
-| 🎓 **Research & Academia** | Literature review, citation analysis, semantic clustering |
-| 🛒 **E-commerce** | Product matching, review analysis, catalog normalization |
-| 💬 **Customer Support** | Ticket categorization, FAQ matching, response suggestions |
-
----
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Streamlit Web Interface                 │
-├─────────────────────────────────────────────────────────────┤
-│  File Upload  →  Column Selection  →  Run Analysis          │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-        ┌─────────────┴─────────────┐
-        │   Pipeline Manager        │
-        │   (progress_manager.py)   │
-        └─────────────┬─────────────┘
-                      │
-        ┌─────────────┴──────────────────────────────┐
-        │                                             │
-┌───────▼────────┐                          ┌────────▼─────────┐
-│  FAISS Search  │                          │  LLM Analysis    │
-│  (core.py)     │                          │  (llm_service.py)│
-├────────────────┤                          ├──────────────────┤
-│ • BGE-large    │                          │ • Groq GPT-OSS   │
-│ • Embeddings   │                          │ • Batch Process  │
-│ • Index Cache  │                          │ • Token Tracking │
-│ • Exact Match  │                          │ • Result Cache   │
-└────────────────┘                          └──────────────────┘
-        │                                            │
-        └─────────────┬──────────────────────────────┘
-                      │
-        ┌─────────────▼─────────────┐
-        │   Results Processing      │
-        │   (postprocess.py)        │
-        ├───────────────────────────┤
-        │ • Visualization           │
-        │ • Excel/JSON Export       │
-        │ • Summary Statistics      │
-        └───────────────────────────┘
+```mermaid
+graph TD
+    Base["Base Spec (Excel)"] & New["New Spec (Excel)"] --> Pre["Preprocess & Align Sections"]
+    
+    Pre --> Shortcut{"Exact Match Detector"}
+    Shortcut -->|Identical Content| Save["Direct Score 1.0 (No LLM Cost)"]
+    Shortcut -->|Semantic Search| Vector["NVIDIA NIM Embeddings (nv-embed-qa-4)"]
+    
+    Vector --> Memory{"Short-Term Memory Recall (ChromaDB fb_user)"}
+    Memory -->|Cache Hit| Match["Reuse Previous Human Verdict"]
+    Memory -->|Cache Miss| LLM["NVIDIA NIM LLM Analysis (llama-3.1-70b)"]
+    
+    LLM --> UI["Interactive Review Screen"]
+    Save & Match --> UI
+    
+    UI --> Feedback{"Feedback Loop"}
+    Feedback -->|OK / Not OK| GlobalStore["Long-Term Memory (feedback_global)"]
+    GlobalStore --> Gate{"5-Gate Self-Improvement Compiler"}
+    Gate --> PromptUpdate["Deploy Updated Prompt (Canary Router)"]
 ```
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Key Features
 
-### Prerequisites
+* **Multi-Layer Token Saver**:
+  1. **Exact String Match**: Bypasses embeddings and LLM calls entirely for matching rows, saving 40%+ compute.
+  2. **Short-Term Memory**: Checks current pairs against previous human-validated reviews in ChromaDB (using cosine similarity $\geq 0.97$) to reuse verdicts.
+  3. **Local Result Cache**: Thread-safe caching on disk with SHA-256 session keys.
+* **5-Gate Self-Improvement Compiler**:
+  - *Gate 1*: Aggregates error reports anonymously (Not OK verdicts).
+  - *Gate 2*: LLM dynamically designs prompt updates based on error patterns.
+  - *Gate 3*: Shadow validates updated prompts against historical test suites.
+  - *Gate 4*: Administrator reviews the proposed prompt changes.
+  - *Gate 5*: Canary deploys the new prompt version to a subset (10%) of active sessions.
+* **Interactive UI**: Custom tables with inline diff markers and review logs.
 
-```bash
-Python 3.9+
-pip (Python package manager)
+---
+
+## 📁 Repository Structure
+
+```text
+sentence-similarity-tool/
+├── am_ais_assist/          # Core backend package
+│   ├── cache_manager.py    # Per-user isolated cache handlers
+│   ├── config.py           # NVIDIA NIM and ChromaDB configurations
+│   ├── core.py             # ChromaDB client and similarity metrics
+│   ├── feedback_store.py   # Short-term and long-term memory operations
+│   ├── llm_service.py      # OpenAI client setup for NVIDIA NIM endpoints
+│   ├── pipeline.py         # Main execution coordinator
+│   ├── postprocess.py      # Excel generation and difference highlighting
+│   ├── preprocess.py       # Excel parser and section strategies
+│   ├── progress_manager.py # Multi-user thread-safe progress callbacks
+│   ├── prompt_registry.py  # Prompt version storage and canary metadata
+│   ├── self_improve.py     # 5-Gate self-improving prompt compiler
+│   └── utils.py            # Embedding visualizers and helper functions
+├── prompts/
+│   └── image_prompt_sentence_similarity.md  # ChatGPT design prompts
+├── app.py                  # Streamlit entry point
+├── Dockerfile              # Deployment configuration
+├── requirements.txt        # Package dependencies
+└── skills.md               # Antigravity skill definitions
 ```
 
-### Installation
+---
 
-1. **Clone the Repository**
-```bash
-git clone https://github.com/Vignesh-Manivasakam/sentence-similarity-tool.git
-cd sentence-similarity-tool
+## 🛠️ Setup & Execution
+
+### 1. Configure the Environment
+Create a `.env` file at the root of the project:
+```env
+NVIDIA_API_KEY="nvapi-..."
+NVIDIA_BASE_URL="https://integrate.api.nvidia.com/v1"
 ```
 
-2. **Install Dependencies**
+### 2. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-3. **Set Up Environment Variables**
-```bash
-# Create .env file or set environment variable
-export GROQ_API_KEY="your_groq_api_key_here"
-```
-
-4. **Run the Application**
+### 3. Launch the Streamlit Workbench
 ```bash
 streamlit run app.py
 ```
 
-5. **Access the Tool**
-```
-Open your browser and navigate to: http://localhost:8501
-```
-
 ---
 
-## 🎮 Usage Guide
-
-### Step 1: Upload Files
-- **Base File**: Your reference dataset (Excel format)
-- **Check File**: The dataset you want to compare against base
-
-### Step 2: Configure Columns
-- Select **Identifier Column**: Unique ID for each entry
-- Select **Text Column**: The content to analyze
-- (Optional) Select **Additional Columns**: Metadata to preserve
-
-### Step 3: Set Parameters
-- **Top K Matches**: Number of similar entries to return per query (1-10)
-
-### Step 4: Run Analysis
-- Click **🚀 Run Similarity Search**
-- Watch the unified progress bar track all phases:
-  - Phase 1: Preprocessing & Embedding Generation
-  - Phase 2: FAISS Similarity Search
-  - Phase 3: LLM Relationship Analysis
-
-### Step 5: Explore Results
-- **Summary View**: High-level statistics and metrics
-- **Visualization**: 3D embedding space with interactive exploration
-- **Results Table**: Detailed matches with highlighted differences
-- **Download**: Export as Excel (with formatting) or JSON
-
----
-
-## 📊 Sample Results
-
-### LLM Relationship Classifications
-
-| Relationship | Score Range | Description | Example |
-|-------------|-------------|-------------|---------|
-| 🟢 **Exact Match** | 1.0 | Identical strings | "The quick brown fox" ↔ "The quick brown fox" |
-| 🟢 **Equivalent** | 0.95-1.0 | Same meaning, different words | "automobile" ↔ "car" |
-| 🟡 **Related** | 0.50-0.94 | Partial overlap or related concepts | "sedan" ↔ "vehicle" |
-| 🔴 **Contradictory** | 0.00-0.20 | Opposite meanings | "hot" ↔ "cold" |
-
----
-
-## 🛠️ Technical Stack
-
-### Core Technologies
-- **Framework**: Streamlit 1.28+
-- **Vector Search**: FAISS (Facebook AI Similarity Search)
-- **Embeddings**: BAAI/bge-large-en-v1.5 (1024 dimensions)
-- **LLM**: Groq GPT-OSS-20B via Groq API
-- **Visualization**: Plotly, Matplotlib
-- **Data Processing**: Pandas, NumPy, SciKit-Learn
-
-### Key Libraries
-```
-streamlit>=1.28.0
-sentence-transformers>=2.2.2
-faiss-cpu>=1.7.4
-groq>=0.4.0
-plotly>=5.14.0
-openpyxl>=3.1.0
-pandas>=2.0.0
-```
-
----
-
-## ⚙️ Configuration
-
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GROQ_API_KEY` | Groq API key for LLM analysis | Required |
-| `LOG_LEVEL` | Logging verbosity | `INFO` |
-| `CUDA_AVAILABLE` | Enable GPU acceleration | `false` |
-
-### Configurable Parameters (`app/config.py`)
-
-```python
-# Embedding Configuration
-EMBEDDING_MODEL_NAME = 'BAAI/bge-large-en-v1.5'
-EMBEDDING_DIMENSION = 1024
-EMBEDDING_BATCH_SIZE = 32
-
-# Text Processing
-MAX_TOKENS_FOR_TRUNCATION = 512
-
-# LLM Configuration
-GROQ_MODEL = "openai/gpt-oss-20b"
-GROQ_TEMPERATURE = 0.0
-LLM_BATCH_TOKEN_LIMIT = 100000
-
-# Session Management
-SESSION_TIMEOUT_HOURS = 24
-MAX_CONCURRENT_USERS = 100
-```
-
----
-
-## 📁 Project Structure
-
-```
-sentence-similarity-tool/
-│
-├── app.py                      # Main Streamlit application
-├── requirements.txt            # Python dependencies
-├── Dockerfile                  # Container configuration
-│
-├── app/
-│   ├── config.py              # Configuration & environment setup
-│   ├── core.py                # FAISS indexing & similarity search
-│   ├── llm_service.py         # Groq LLM integration & batching
-│   ├── pipeline.py            # Orchestration of analysis workflow
-│   ├── preprocess.py          # Text cleaning & normalization
-│   ├── postprocess.py         # Results formatting & export
-│   ├── progress_manager.py    # Unified progress tracking
-│   └── utils.py               # Helper functions & utilities
-│
-├── app/prompts/
-│   └── system_prompt.txt      # LLM prompt template
-│
-└── static/
-    └── css/
-        └── custom.css         # UI styling & themes
-```
-
----
-
-## 🔬 Advanced Features
-
-### Hierarchy-Based Tie Breaking
-When multiple entries have identical similarity scores, the tool uses hierarchical identifiers (e.g., "1.2.3") to select the most structurally relevant match.
-
-### Smart Caching Strategy
-- **User-Specific Cache**: Each session maintains isolated embeddings and indices
-- **Hash-Based Validation**: Automatic cache invalidation on file changes
-- **LLM Response Cache**: Avoid redundant API calls for identical pairs
-
-### Token Optimization
-- **Batch Aggregation**: Groups LLM calls to maximize tokens per request
-- **Dynamic Batching**: Respects token limits while minimizing API calls
-- **Usage Tracking**: Real-time display of prompt/completion token consumption
-
----
-
-## 🎨 Screenshots
-
-### Main Interface
-![Main Interface](docs/images/Main_Interface.png)
-*Upload files, select columns, and configure analysis parameters*
-
-### Processing Pipeline
-![Processing](docs/images/Processing.png)
-*Real-time progress across preprocessing, FAISS search, and LLM analysis*
-
-### Results Dashboard
-![LLM_Embedding_Visualisation](docs/images/LLM_Emedding_Visualisation.png)
-![FAISS_PLOT](docs/images/FAISS_Plot.png)
-![COMBINED_PLOT](docs/images/Combined_Table.png)
-
-*Comprehensive summary with FAISS and LLM insights*
-
-### Results Table
-![Table](docs/images/Result_table.png)
-*Color-coded relationships with highlighted text differences*
-
----
-
-## 🧪 Testing
-
-Run tests with:
-```bash
-# Unit tests
-pytest tests/
-
-# Integration tests
-pytest tests/integration/
-
-# Coverage report
-pytest --cov=app tests/
-```
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
----
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- **BAAI** for the BGE-large-en-v1.5 embedding model
-- **Groq** for ultra-fast LLM inference
-- **Facebook Research** for FAISS vector search library
-- **Streamlit** for the amazing web framework
-- **HuggingFace** for model hosting and deployment
-
----
-
-## 📧 Contact
-
-**Vignesh Manivasakam**
-
-- GitHub: [@Vignesh-Manivasakam](https://github.com/Vignesh-Manivasakam)
-- Project Link: [https://github.com/Vignesh-Manivasakam/sentence-similarity-tool](https://github.com/Vignesh-Manivasakam/sentence-similarity-tool)
-- Live Demo: [https://huggingface.co/spaces/Vignesh0503/sentence-similarity-tool](https://huggingface.co/spaces/Vignesh0503/sentence-similarity-tool)
-
----
-
-<div align="center">
-
-**⭐ Star this repository if you find it helpful! ⭐**
-
-Made with ❤️ by Vignesh Manivasakam
-
-</div>
+## 🛡️ Corporate Confidentiality Notice
+This repository is an anonymized, public proof-of-concept (`[Public POC]`) demonstrating the semantic matching and memory pipeline architectures. It does not contain proprietary data or internal intellectual property from Bosch or ZF Rane.

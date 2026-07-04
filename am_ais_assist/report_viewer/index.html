@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Interactive Report Viewer</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0e1117;
+            color: #fafafa;
+            margin: 0;
+            padding: 10px;
+            overflow-x: auto;
+            font-size: 14px;
+        }
+        
+        /* Toolbar */
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            background-color: #1e222b;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #2d3139;
+        }
+        
+        .toolbar-title {
+            font-weight: 600;
+            font-size: 16px;
+            color: #fafafa;
+            margin-right: auto;
+        }
+        
+        .search-input {
+            background-color: #0e1117;
+            border: 1px solid #444c56;
+            color: #fafafa;
+            padding: 6px 12px;
+            border-radius: 6px;
+            width: 250px;
+            font-size: 13px;
+            outline: none;
+        }
+        .search-input:focus {
+            border-color: #58a6ff;
+        }
+        
+        .filter-select {
+            background-color: #0e1117;
+            border: 1px solid #444c56;
+            color: #fafafa;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+            cursor: pointer;
+        }
+        .filter-select:focus {
+            border-color: #58a6ff;
+        }
+        
+        .btn {
+            background-color: #21262d;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            outline: none;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .btn:hover {
+            background-color: #30363d;
+            border-color: #8b949e;
+        }
+        .btn-success {
+            background-color: #238636;
+            border-color: #2ea44f;
+            color: #ffffff;
+        }
+        .btn-success:hover {
+            background-color: #2ea44f;
+            border-color: #3fb950;
+        }
+        
+        /* Table container */
+        .table-container {
+            border-radius: 8px;
+            border: 1px solid #2d3139;
+            background-color: #1c2128;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        }
+        
+        /* Spreadsheet table */
+        table.results-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+        
+        table.results-table th {
+            background-color: #22272e;
+            color: #adbac7;
+            font-weight: 600;
+            padding: 10px 12px;
+            border-bottom: 2px solid #2d3139;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        table.results-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #2d3139;
+            vertical-align: middle;
+            line-height: 1.4;
+        }
+        
+        table.results-table tr:hover {
+            background-color: #22272e;
+        }
+        
+        /* Cell styles */
+        .sentence-column {
+            min-width: 250px;
+            max-width: 450px;
+            word-wrap: break-word;
+        }
+        .id-column {
+            font-family: monospace;
+            color: #768390;
+            white-space: nowrap;
+        }
+        
+        /* Action buttons inside cell */
+        .review-cell {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        
+        .action-btn {
+            background: none;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+            color: #768390;
+        }
+        .action-btn:hover {
+            border-color: #8b949e;
+        }
+        
+        .action-btn.ok-active {
+            background-color: #1b4332;
+            border-color: #2d6a4f;
+            color: #52b788;
+        }
+        
+        .action-btn.not-ok-active {
+            background-color: #4a121a;
+            border-color: #800f2f;
+            color: #ff4d6d;
+        }
+        
+        /* Remark inputs */
+        .remark-box {
+            background-color: #0e1117;
+            border: 1px solid #30363d;
+            color: #fafafa;
+            padding: 5px 8px;
+            border-radius: 4px;
+            width: 90%;
+            font-size: 13px;
+            outline: none;
+        }
+        .remark-box:focus {
+            border-color: #58a6ff;
+        }
+        
+        /* Counter badge */
+        .badge {
+            background-color: #313d4f;
+            color: #adbac7;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 11px;
+            margin-left: 6px;
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Spreadsheet toolbar -->
+    <div class="toolbar">
+        <span class="toolbar-title">📝 Comparison Sheet <span class="badge" id="row-counter">0 rows</span></span>
+        
+        <input type="text" id="search" class="search-input" placeholder="🔍 Search requirements..." onkeyup="applyFilters()">
+        
+        <select id="filter-level" class="filter-select" onchange="applyFilters()">
+            <option value="All">All Similarity Levels</option>
+            <option value="Exact Match">Exact Match</option>
+            <option value="Equivalent">Equivalent</option>
+            <option value="Related">Related</option>
+            <option value="Contradictory">Contradictory</option>
+            <option value="New Requirement">New Requirement</option>
+            <option value="Deleted">Deleted</option>
+        </select>
+        
+        <select id="filter-status" class="filter-select" onchange="applyFilters()">
+            <option value="All">All Review Statuses</option>
+            <option value="Pending">Pending</option>
+            <option value="OK">OK</option>
+            <option value="Not OK">Not OK</option>
+        </select>
+        
+        <button class="btn" onclick="approveAllExact()">✅ Approve All Exact</button>
+        <button class="btn btn-success" onclick="triggerSave()">💾 Save Reviews</button>
+    </div>
+
+    <!-- Spreadsheet table -->
+    <div class="table-container">
+        <table class="results-table" id="results-table">
+            <thead>
+                <tr id="table-headers">
+                    <!-- Dynamic Headers will be inserted here -->
+                </tr>
+            </thead>
+            <tbody id="table-body">
+                <!-- Dynamic Rows will be inserted here -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        let allData = [];
+        let reviewStatuses = {};
+        let reviewRemarks = {};
+        let headersList = [];
+
+        // Notify Streamlit of values
+        function sendUpdateToStreamlit(action = "update") {
+            window.parent.postMessage({
+                isStreamlitMessage: true,
+                type: "streamlit:setComponentValue",
+                value: {
+                    action: action,
+                    review_statuses: reviewStatuses,
+                    review_remarks: reviewRemarks,
+                    timestamp: new Date().getTime()
+                }
+            }, "*");
+        }
+
+        // Notify Streamlit of iframe height changes
+        function setFrameHeight(height) {
+            window.parent.postMessage({
+                isStreamlitMessage: true,
+                type: "streamlit:setFrameHeight",
+                value: height
+            }, "*");
+        }
+
+        // Listen for data from Streamlit
+        window.addEventListener("message", function(event) {
+            if (event.data.type === "streamlit:render") {
+                const args = event.data.args;
+                allData = JSON.parse(args.df_json || "[]");
+                reviewStatuses = args.review_statuses || {};
+                reviewRemarks = args.review_remarks || {};
+                
+                // Initialize default review status if not set
+                allData.forEach(row => {
+                    const qid = String(row.Query_Object_Identifier || "");
+                    if (qid && !reviewStatuses[qid]) {
+                        reviewStatuses[qid] = "Pending";
+                    }
+                });
+
+                renderTable();
+                
+                // Auto-adjust height to fit the content
+                setTimeout(() => {
+                    const height = document.body.scrollHeight + 30;
+                    setFrameHeight(height);
+                }, 50);
+            }
+        });
+
+        // Send componentReady event to Streamlit to initialize handshake
+        window.parent.postMessage({
+            isStreamlitMessage: true,
+            type: "streamlit:componentReady",
+            apiVersion: 1
+        }, "*");
+
+        // Parse and render the table
+        function renderTable() {
+            if (!allData || allData.length === 0) {
+                document.getElementById("table-body").innerHTML = '<tr><td colspan="10" style="text-align:center; color:#768390;">No data loaded.</td></tr>';
+                return;
+            }
+
+            // Identify visible columns based on data keys
+            const sampleRow = allData[0];
+            const allKeys = Object.keys(sampleRow);
+            
+            // Build visible columns list
+            const queryMeta = allKeys.filter(k => k.startsWith("Query_") && !["Query_Sentence_Highlighted", "Query_Sentence", "Query_Sentence_Cleaned_text", "Query_Object_Identifier"].includes(k)).sort();
+            const matchedMeta = allKeys.filter(k => k.startsWith("Matched_") && !["Matched_Sentence_Highlighted", "Matched_Sentence", "Matched_Sentence_Cleaned_text", "Matched_Object_Identifier"].includes(k)).sort();
+            
+            headersList = [
+                { key: "Query_Object_Identifier", label: "Query ID" },
+                { key: "Query_Sentence_Highlighted", label: "Query Requirement" },
+                ...queryMeta.map(k => ({ key: k, label: k.replace("Query_", "").replace(/_/g, " ") })),
+                { key: "Matched_Object_Identifier", label: "Matched ID" },
+                { key: "Matched_Sentence_Highlighted", label: "Matched Requirement" },
+                ...matchedMeta.map(k => ({ key: k, label: k.replace("Matched_", "").replace(/_/g, " ") })),
+                { key: "Similarity_Score", label: "Score" },
+                { key: "Similarity_Level", label: "Similarity Level" },
+                { key: "Remark", label: "AI Remark" },
+                { key: "_review_actions", label: "Review Verdict" },
+                { key: "_user_remark", label: "User Remark" }
+            ];
+
+            // Render headers
+            const headerRow = document.getElementById("table-headers");
+            headerRow.innerHTML = headersList.map(h => `<th class="sentence-column">${h.label}</th>`).join("");
+
+            // Render body rows
+            applyFilters();
+        }
+
+        // Apply search and dropdown filters
+        function applyFilters() {
+            const searchQuery = document.getElementById("search").value.toLowerCase();
+            const levelFilter = document.getElementById("filter-level").value;
+            const statusFilter = document.getElementById("filter-status").value;
+
+            const tbody = document.getElementById("table-body");
+            let filteredRows = [];
+
+            allData.forEach(row => {
+                const qid = String(row.Query_Object_Identifier || "");
+                const status = reviewStatuses[qid] || "Pending";
+                const level = String(row.Similarity_Level || "");
+                
+                // 1. Level filter match
+                if (levelFilter !== "All" && level !== levelFilter) return;
+                
+                // 2. Status filter match
+                if (statusFilter !== "All" && status !== statusFilter) return;
+
+                // 3. Search query match across text fields
+                if (searchQuery) {
+                    const qText = String(row.Query_Sentence || "").toLowerCase();
+                    const mText = String(row.Matched_Sentence || "").toLowerCase();
+                    const remark = String(row.Remark || "").toLowerCase();
+                    if (!qText.includes(searchQuery) && !mText.includes(searchQuery) && !remark.includes(searchQuery) && !qid.toLowerCase().includes(searchQuery)) {
+                        return;
+                    }
+                }
+
+                filteredRows.push(row);
+            });
+
+            // Update row counter
+            document.getElementById("row-counter").innerText = `${filteredRows.length} rows`;
+
+            // Build rows HTML
+            if (filteredRows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="${headersList.length}" style="text-align:center; color:#768390; padding:20px;">No matching results found.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filteredRows.map(row => {
+                const qid = String(row.Query_Object_Identifier || "");
+                const currentStatus = reviewStatuses[qid] || "Pending";
+                const currentRemark = reviewRemarks[qid] || "";
+
+                return `
+                    <tr data-qid="${qid}">
+                        ${headersList.map(h => {
+                            if (h.key === "_review_actions") {
+                                return `
+                                    <td>
+                                        <div class="review-cell">
+                                            <button class="action-btn ${currentStatus === 'OK' ? 'ok-active' : ''}" onclick="setVerdict('${qid}', 'OK')">✅ OK</button>
+                                            <button class="action-btn ${currentStatus === 'Not OK' ? 'not-ok-active' : ''}" onclick="setVerdict('${qid}', 'Not OK')">❌ Not OK</button>
+                                        </div>
+                                    </td>
+                                `;
+                            } else if (h.key === "_user_remark") {
+                                return `
+                                    <td>
+                                        <input type="text" class="remark-box" value="${escapeHtml(currentRemark)}" placeholder="Add remark..." onblur="updateRemark('${qid}', this.value)" onkeyup="if(event.key==='Enter') this.blur()">
+                                    </td>
+                                `;
+                            } else if (h.key === "Similarity_Level") {
+                                const levelVal = String(row[h.key] || "");
+                                let color = "#fafafa";
+                                if (levelVal === "Exact Match") color = "#00c853";
+                                else if (levelVal === "Equivalent") color = "#00e5ff";
+                                else if (levelVal === "Related") color = "#ffab00";
+                                else if (levelVal === "Contradictory") color = "#ff3d00";
+                                else if (levelVal === "New Requirement") color = "#1565C0";
+                                else if (levelVal === "Deleted") color = "#7B1FA2";
+                                return `<td style="color: ${color}; font-weight: bold;">${escapeHtml(levelVal)}</td>`;
+                            } else if (h.key === "Similarity_Score") {
+                                const scoreVal = String(row[h.key] || "");
+                                return `<td style="font-weight: bold; color: #adbac7;">${escapeHtml(scoreVal)}</td>`;
+                            } else if (h.key.endsWith("_Highlighted")) {
+                                // Preserved HTML highlight from Python (ndiff spans)
+                                return `<td class="sentence-column">${row[h.key] || "N/A"}</td>`;
+                            } else {
+                                return `<td>${escapeHtml(String(row[h.key] || "N/A"))}</td>`;
+                            }
+                        }).join("")}
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        // Set verdict OK / Not OK
+        function setVerdict(qid, verdict) {
+            const current = reviewStatuses[qid];
+            if (current === verdict) {
+                reviewStatuses[qid] = "Pending"; // Toggle off
+            } else {
+                reviewStatuses[qid] = verdict;
+            }
+            
+            // Highlight the buttons instantly in the DOM
+            const row = document.querySelector(`tr[data-qid="${qid}"]`);
+            if (row) {
+                const btnOk = row.querySelector(".action-btn:nth-child(1)");
+                const btnNotOk = row.querySelector(".action-btn:nth-child(2)");
+                
+                btnOk.className = `action-btn ${reviewStatuses[qid] === 'OK' ? 'ok-active' : ''}`;
+                btnNotOk.className = `action-btn ${reviewStatuses[qid] === 'Not OK' ? 'not-ok-active' : ''}`;
+            }
+
+            sendUpdateToStreamlit("update");
+        }
+
+        // Update remark text
+        function updateRemark(qid, text) {
+            if (reviewRemarks[qid] !== text) {
+                reviewRemarks[qid] = text;
+                sendUpdateToStreamlit("update");
+            }
+        }
+
+        // Approve all exact matches in one click
+        function approveAllExact() {
+            let count = 0;
+            allData.forEach(row => {
+                if (row.Similarity_Level === "Exact Match") {
+                    const qid = String(row.Query_Object_Identifier || "");
+                    if (qid && reviewStatuses[qid] !== "OK") {
+                        reviewStatuses[qid] = "OK";
+                        count++;
+                    }
+                }
+            });
+            if (count > 0) {
+                renderTable();
+                sendUpdateToStreamlit("update");
+            }
+        }
+
+        // Explicit Save click
+        function triggerSave() {
+            sendUpdateToStreamlit("save");
+        }
+
+        // HTML escaping helper
+        function escapeHtml(str) {
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
