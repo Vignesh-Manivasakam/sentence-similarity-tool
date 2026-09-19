@@ -1,5 +1,5 @@
 """
-Some utility functions for use in Modanalit pages.
+Some utility functions for use in AI Similarity Assist.
 """
 
 import os

@@ -159,7 +159,7 @@ def initialize_user_session() -> str:
             if req_secret != gateway_secret:
                 logging.warning("Security Warning: request headers missing or invalid X-Gateway-Secret. Reverting to guest.")
                 st.session_state.user_name = "guest_user"
-                st.session_state.user_email = "guest_user@bosch.com"
+                st.session_state.user_email = "guest_user@example.com"
                 st.session_state.user_id = "guest_user_pseudonym"
                 return st.session_state.user_session_id
 
@@ -167,7 +167,7 @@ def initialize_user_session() -> str:
             "X-Auth-Request-Preferred-Username", "local_user"
         )
         st.session_state.user_email = st.context.headers.get(
-            "X-Auth-Request-Email", "local_mail@bosch.com"
+            "X-Auth-Request-Email", "local_user@example.com"
         )
         st.session_state.user_id = st.context.headers.get(
             "X-Auth-Request-User", "local_user_pseudonym"
@@ -636,7 +636,7 @@ def main() -> None:  # noqa: PLR0915
     with btn_col_doc:
         st.link_button(
             "📖 Docs",
-            "https://pages.github.boschdevcloud.com/modana/am-ais-assist/",
+            "https://github.com/Vignesh-Manivasakam/sentence-similarity-tool#readme",
             use_container_width=True,
         )
     with btn_col_help:
@@ -644,15 +644,15 @@ def main() -> None:  # noqa: PLR0915
             st.markdown("**Need assistance?**")
             st.markdown(
                 '<a class="help-link-btn" '
-                'href="mailto:Manivasakam.Vignesh@in.bosch.com">'
+                'href="mailto:vicky.manivasagam@gmail.com">'
                 "✉️ Email Support</a>",
                 unsafe_allow_html=True,
             )
             st.markdown(
                 '<a class="help-link-btn" '
-                'href="https://teams.microsoft.com/l/channel/19%3APmXVfo23UBDPU8Z41yGuzSbh627VmG7g5OF-YGZLvyE1%40thread.tacv2/AIS%20Tenant%40MODANA-BPC?groupId=b1b89dc4-1672-4b18-85ca-323ba1d25f34&tenantId=0ae51e19-07c8-4e4b-bb6d-648ee58410f4&ngc=true" '
+                'href="https://github.com/Vignesh-Manivasakam/sentence-similarity-tool/issues" '
                 'target="_blank">'
-                "💬 Teams Channel</a>",
+                "💬 Issue Tracker</a>",
                 unsafe_allow_html=True,
             )
 
@@ -661,7 +661,7 @@ def main() -> None:  # noqa: PLR0915
         unsafe_allow_html=True,
     )
     st.markdown(
-        "<h6 style='text-align: center;'>For any Queries Contact: <br>Vignesh Manivasakam (MS/ENP42-VM)</h6>",
+        "<h6 style='text-align: center;'>Lead AI & ML Systems Engineer: <br>Vignesh Manivasakam</h6>",
         unsafe_allow_html=True,
     )
 
