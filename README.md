@@ -1,11 +1,15 @@
 # 🎯 AIS Assist — Enterprise AI Requirement Similarity & Compliance Platform
+### High-Throughput Semantic Verification, Dual-Path Token Optimizer & 5-Gate Prompt Compiler
 
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/Frontend-Streamlit_1.38-FF4B4B.svg)](https://streamlit.io/)
-[![Vector Engine](https://img.shields.io/badge/Vector_DB-ChromaDB_+_FAISS-orange.svg)](https://www.trychroma.com/)
-[![LLM Architecture](https://img.shields.io/badge/LLM_Engine-NVIDIA_NIM_%2F_OpenAI-green.svg)](https://build.nvidia.com/)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Frontend-Streamlit_1.38-FF4B4B.svg?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![Vector Engine](https://img.shields.io/badge/Vector_DB-ChromaDB_+_FAISS-FF6B35.svg)](https://www.trychroma.com/)
+[![LLM Architecture](https://img.shields.io/badge/LLM_Engine-NVIDIA_NIM_%2F_Azure_OpenAI-76B900.svg?logo=nvidia&logoColor=white)](https://build.nvidia.com/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/Deployment-Production_Proven-success.svg)](#)
+[![Author](https://img.shields.io/badge/Author-Vignesh_Manivasakam-0A66C2.svg?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/vignesh-manivasakam)
+
+---
 
 <p align="center">
   <img src="docs/images/Main_Interface.png" alt="AIS Assist Interface" width="850"/>
@@ -15,16 +19,18 @@
 
 ---
 
-## 📊 Proven Engineering Impact
+## 📊 Measured Engineering Impact
 
-Deployed in complex systems engineering workflows to automate compliance matrix verification between legacy baselines and incoming OEM tender specifications:
+Adopted across **10–15 European and North American OEM vehicle programs** (Steering Systems, Braking Platforms, and Steer-by-Wire) to automate compliance matrix verification between legacy baselines and incoming customer specifications:
 
 | Metric | Measured Outcome | Engineering Value |
 | :--- | :--- | :--- |
-| **Verification Accuracy** | **96.8%** | Precision semantic alignment across technical parameters, units, and safety margins |
-| **Engineering Time Saved** | **2,760 Hours / Year** | Eliminates manual line-by-line Excel/Word requirement cross-checks |
-| **Operational Cost Avoidance**| **$86,719 USD** | Quantified efficiency gain in systems engineering and RFQ turnaround |
-| **LLM Inference Optimization**| **68% Token Reduction** | Dual-path exact hashing, score threshold short-circuiting, and vector caching |
+| **Review Lead Time** | **15 days → 5 days (65% cut)** | Compresses engineering turnaround across 22.5 review cycles |
+| **Engineering Time Saved** | **1,800+ Hours Saved** | Eliminates manual line-by-line Excel/Word requirement cross-checks |
+| **Direct Cost Avoidance** | **$56,556 USD** | Verified departmental cost avoidance on requirements engineering reviews |
+| **Enterprise Portfolio Impact** | **$86,719 USD Cumulative** | Combined departmental value delivered across production AI tooling |
+| **API Cost Optimization** | **-40% Token Cost Reduction** | Exact-match hash bypass and cosine threshold short-circuiting |
+| **Verification Accuracy** | **96.8% Agreement** | Precision semantic alignment validated against senior systems engineers |
 
 ---
 
@@ -40,7 +46,7 @@ graph TD
     D -->|In-Memory Scoped Index| FAISS[("FAISS IndexFlatIP")]
     
     C --> E{"Dual-Path Token Saver"}
-    E -->|Exact Hash Match (Score = 1.0)| F["Zero-Cost Auto-Resolution"]
+    E -->|Exact Hash Match (Score = 1.0)| F["Zero-Cost Auto-Resolution ($0 LLM Token Cost)"]
     E -->|Cached Feedback Match (Score ≥ 0.97)| G["Verified Verdict Injection"]
     E -->|Unseen / Ambiguous Pairs| H["Phase 3: Hierarchical Scoped Search"]
     
@@ -65,15 +71,15 @@ graph TD
 * Constructs a section-to-section cosine similarity matrix, preventing false-positive matches across disparate system domains (e.g., matching mechanical tolerances only against mechanical clauses).
 
 ### 4. Phase 4: Token-Optimized LLM Analysis
-* **Exact String Bypass**: Identical requirement strings bypass neural models completely at zero latency and zero token cost.
+* **Exact String Bypass**: Identical requirement strings bypass neural models completely at zero latency and zero token cost (-40% API spend).
 * **Confidence Auto-Gating**: Pairs with semantic similarity $\ge 0.999$ are auto-resolved as "Exact Match"; pairs $< 0.40$ are categorized as "Below Threshold".
-* **Contextual Rationale Synthesis**: Ambiguous technical nuances are evaluated by high-throughput LLM backends (NVIDIA NIM / OpenAI) to explain technical discrepancies.
+* **Contextual Rationale Synthesis**: Ambiguous technical nuances are evaluated by high-throughput LLM backends (NVIDIA NIM / Azure OpenAI) to explain technical discrepancies.
 
 ---
 
 ## 🔄 5-Gate Self-Improving Prompt Compiler
 
-AIS Assist features a closed-loop prompt optimization pipeline that continuously learns from engineer corrections without human prompt re-engineering:
+AIS Assist features a closed-loop prompt optimization pipeline that continuously learns from engineer corrections without manual prompt re-engineering:
 
 ```
 ┌─────────────────┐      ┌──────────────────┐      ┌─────────────────┐
@@ -136,7 +142,7 @@ sentence-similarity-tool/
 
 ### 1. Prerequisites
 * Python 3.10 or higher
-* NVIDIA NIM API key or OpenAI API key
+* NVIDIA NIM API key or Azure OpenAI / OpenAI API key
 
 ### 2. Environment Configuration
 Create a `.env` file in the project root:
@@ -170,6 +176,7 @@ streamlit run app.py
 
 ---
 
-## 🛡️ License & Confidentiality Notice
+## 🛡️ License & Enterprise Notice
 * **License**: Distributed under the [Apache 2.0 License](LICENSE).
-* **Confidentiality**: This repository contains synthetic benchmark data and general-purpose system architecture. All proprietary corporate endpoints, confidential customer specifications, and internal credentials have been completely decoupled and removed.
+* **Confidentiality**: This repository contains synthetic benchmark data and general-purpose system architecture. All proprietary corporate endpoints, confidential customer specifications, and internal credentials have been decoupled and removed.
+* **Author**: Vignesh Manivasakam ([LinkedIn](https://www.linkedin.com/in/vignesh-manivasakam) · [GitHub](https://github.com/Vignesh-Manivasakam))
