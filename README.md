@@ -37,18 +37,18 @@ Adopted across **10–15 European and North American OEM vehicle programs** (Ste
 ## 🏗️ 4-Phase System Architecture
 
 ```mermaid
-graph TD
+flowchart TD
     A["Raw Customer Spec & Baseline (Excel/CSV)"] --> B["Phase 1: Ingestion & Normalization"]
-    B -->|Pint Unit Conversion + Regex Stripping| C["Normalized Requirement Stream"]
+    B -->|"Pint Unit Conversion + Regex Stripping"| C["Normalized Requirement Stream"]
     
     C --> D["Phase 2: Vector Indexing & Tree Parsing"]
-    D -->|Persistent Collection| Chroma[("ChromaDB Vector Store")]
-    D -->|In-Memory Scoped Index| FAISS[("FAISS IndexFlatIP")]
+    D -->|"Persistent Collection"| Chroma[("ChromaDB Vector Store")]
+    D -->|"In-Memory Scoped Index"| FAISS[("FAISS IndexFlatIP")]
     
     C --> E{"Dual-Path Token Saver"}
-    E -->|Exact Hash Match (Score = 1.0)| F["Zero-Cost Auto-Resolution ($0 LLM Token Cost)"]
-    E -->|Cached Feedback Match (Score ≥ 0.97)| G["Verified Verdict Injection"]
-    E -->|Unseen / Ambiguous Pairs| H["Phase 3: Hierarchical Scoped Search"]
+    E -->|"Exact Hash Match (Score = 1.0)"| F["Zero-Cost Auto-Resolution ($0 LLM Token Cost)"]
+    E -->|"Cached Feedback Match (Score ≥ 0.97)"| G["Verified Verdict Injection"]
+    E -->|"Unseen / Ambiguous Pairs"| H["Phase 3: Hierarchical Scoped Search"]
     
     H --> I["Section-Aware Cross Matching"]
     I --> J["Phase 4: LLM Semantic Analysis & Synthesis"]
